@@ -1,0 +1,219 @@
+import { useState, useCallback } from 'react';
+import { Image as ImageIcon, Download, Lock, Unlock } from 'lucide-react';
+import { FileDropzone } from '@/components/FileDropzone';
+import { ProgressBar } from '@/components/ProgressBar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { useImage } from '@/hooks/useImage';
+import { useToast } from '@/hooks/use-toast';
+
+export const ImageResize = () => {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [originalDimensions, setOriginalDimensions] = useState({ width: 0, height: 0 });
+  const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
+  const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
+  const { resizeImage, processing, progress } = useImage();
+  const { toast } = useToast();
+
+  const handleFilesDrop = useCallback((fileList: FileList) => {
+    const imageFile = Array.from(fileList).find(
+      f => f.type.startsWith('image/') || 
+           ['.jpg', '.jpeg', '.png', '.webp', '.gif'].some(ext => 
+             f.name.toLowerCase().endsWith(ext)
+           )
+    );
+
+    if (!imageFile) {
+      toast({
+        title: 'Hata',
+        description: 'Lütfen bir görüntü dosyası yükleyin.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setFile(imageFile);
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        setOriginalDimensions({ width: img.width, height: img.height });
+        setWidth(img.width);
+        setHeight(img.height);
+      };
+      img.src = reader.result as string;
+      setPreview(reader.result as string);
+    };
+    reader.readAsDataURL(imageFile);
+  }, [toast]);
+
+  const handleClear = () => {
+    setFile(null);
+    setPreview(null);
+    setOriginalDimensions({ width: 0, height: 0 });
+    setWidth(0);
+    setHeight(0);
+  };
+
+  const handleWidthChange = (value: number) => {
+    setWidth(value);
+    if (maintainAspectRatio && originalDimensions.width > 0) {
+      const ratio = originalDimensions.height / originalDimensions.width;
+      setHeight(Math.round(value * ratio));
+    }
+  };
+
+  const handleHeightChange = (value: number) => {
+    setHeight(value);
+    if (maintainAspectRatio && originalDimensions.height > 0) {
+      const ratio = originalDimensions.width / originalDimensions.height;
+      setWidth(Math.round(value * ratio));
+    }
+  };
+
+  const handleResize = async () => {
+    if (!file || width <= 0 || height <= 0) return;
+
+    try {
+      const blob = await resizeImage(file, width, height, maintainAspectRatio);
+      const ext = file.name.split('.').pop() || 'jpg';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `boyutlandirilmis.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: 'Başarılı',
+        description: 'Görüntü başarıyla boyutlandırıldı.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Hata',
+        description: 'Görüntü boyutlandırma işlemi başarısız oldu.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold flex items-center gap-3">
+          <div className="p-2 bg-green-500 rounded-lg">
+            <ImageIcon className="w-6 h-6 text-white" />
+          </div>
+          Görüntü Boyutlandır
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          Görüntü dosyalarınızın boyutunu değiştirin.
+        </p>
+      </div>
+
+      <FileDropzone
+        onFilesDrop={handleFilesDrop}
+        onClear={handleClear}
+        accept="image/*"
+        multiple={false}
+        selectedFiles={file ? [file] : []}
+      />
+
+      {file && (
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <Label className="mb-2 block">Orijinal Boyut</Label>
+                <p className="text-sm text-muted-foreground">
+                  {originalDimensions.width} x {originalDimensions.height} piksel
+                </p>
+              </div>
+              {preview && (
+                <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mb-6 p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                {maintainAspectRatio ? (
+                  <Lock className="w-4 h-4" />
+                ) : (
+                  <Unlock className="w-4 h-4" />
+                )}
+                <span className="text-sm font-medium">En-Boy Oranını Koru</span>
+              </div>
+              <Switch
+                checked={maintainAspectRatio}
+                onCheckedChange={setMaintainAspectRatio}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <Label htmlFor="width" className="mb-2 block">
+                  Genişlik (px)
+                </Label>
+                <Input
+                  id="width"
+                  type="number"
+                  min={1}
+                  value={width}
+                  onChange={(e) => handleWidthChange(parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="height" className="mb-2 block">
+                  Yükseklik (px)
+                </Label>
+                <Input
+                  id="height"
+                  type="number"
+                  min={1}
+                  value={height}
+                  onChange={(e) => handleHeightChange(parseInt(e.target.value) || 0)}
+                />
+              </div>
+            </div>
+
+            {processing && (
+              <div className="mb-6">
+                <ProgressBar progress={progress} label="Boyutlandırılıyor..." />
+              </div>
+            )}
+
+            <Button
+              onClick={handleResize}
+              disabled={processing || width <= 0 || height <= 0}
+              className="w-full"
+              size="lg"
+            >
+              {processing ? (
+                'İşleniyor...'
+              ) : (
+                <>
+                  <Download className="w-5 h-5 mr-2" />
+                  Boyutlandır ve İndir
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
