@@ -1,17 +1,17 @@
+'use client';
+
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { 
   FileEdit, 
   Download, 
   FileText, 
-  ArrowUp, 
-  ArrowDown, 
   Trash2, 
   RotateCw,
   Plus,
   X,
   ChevronLeft,
   ChevronRight,
-  GripVertical
+  GripHorizontal
 } from 'lucide-react';
 import { FileDropzone } from '@/components/FileDropzone';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -22,7 +22,29 @@ import { cn } from '@/lib/utils';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, degrees } from 'pdf-lib';
 
-// PDF.js v5 için worker ayarı
+// Dnd Kit imports
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+  type DragEndEvent,
+  type DragStartEvent,
+  TouchSensor,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface PDFPage {
@@ -41,30 +63,166 @@ interface PDFFile {
   pageCount: number;
 }
 
+// ==================== SortablePageItem Bileşeni ====================
+interface SortablePageProps {
+  page: PDFPage;
+  index: number;
+  selected: boolean;
+  onSelect: (index: number) => void;
+  onRotate: (index: number) => void;
+  onRemove: (index: number) => void;
+}
+
+const SortablePageItem = ({ 
+  page, 
+  index, 
+  selected, 
+  onSelect, 
+  onRotate, 
+  onRemove 
+}: SortablePageProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: page.id,
+    transition: {
+      duration: 150,
+      easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+    },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'group relative flex flex-col gap-2 p-3 rounded-xl border-2 bg-white dark:bg-gray-900 cursor-grab active:cursor-grabbing transition-all duration-200',
+        selected 
+          ? 'border-primary ring-2 ring-primary/20 shadow-md' 
+          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700',
+        isDragging && 'opacity-50 scale-105 rotate-2 shadow-2xl ring-2 ring-primary',
+        !isDragging && 'hover:shadow-lg hover:-translate-y-1'
+      )}
+    >
+      {/* Toolbar - Üst kısım (Sürükleme ve İşlemler) */}
+      <div className="flex items-center justify-between gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+        <div 
+          {...attributes} 
+          {...listeners}
+          className="p-1.5 rounded-md bg-muted hover:bg-muted-foreground/20 cursor-grab active:cursor-grabbing touch-none"
+        >
+          <GripHorizontal className="w-3 h-3 text-muted-foreground" />
+        </div>
+        <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+          {index + 1}
+        </span>
+        <button
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            onRemove(index);
+          }}
+          className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Thumbnail Container */}
+      <div 
+        className="relative aspect-[210/297] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+        onClick={() => onSelect(index)}
+      >
+        <img
+          src={page.thumbnail}
+          alt={`Sayfa ${index + 1}`}
+          className="w-full h-full object-contain pointer-events-none transition-transform duration-300"
+          style={{ 
+            transform: `rotate(${page.rotation}deg) scale(1.1)`,
+          }}
+          draggable={false}
+        />
+        
+        {/* Seçim İndikatörü */}
+        {selected && (
+          <div className="absolute inset-0 bg-primary/10 pointer-events-none flex items-center justify-center">
+            <div className="bg-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+              Seçili
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Alt Butonlar */}
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            onRotate(index);
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 transition-colors active:scale-95"
+        >
+          <RotateCw className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Döndür</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ==================== Ana PDFEdit Bileşeni ====================
 export const PDFEdit = () => {
   const [files, setFiles] = useState<PDFFile[]>([]);
   const [pages, setPages] = useState<PDFPage[]>([]);
   const [selectedPage, setSelectedPage] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  
-  // Drag & Drop state'leri
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Long press için ref'ler
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLongPress = useRef(false);
-  
+  const [activeId, setActiveId] = useState<string | null>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const thumbnailScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // THUMBNAIL KALİTESİ ARTIRILDI: 0.2'den 0.5'e çıkardım
+  // Dnd Kit Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: (_, { context }) => {
+        const { active, over } = context;
+        if (!active || !over) return { x: 0, y: 0 };
+        
+        const index = pages.findIndex(p => p.id === active.id);
+        if (index === -1) return { x: 0, y: 0 };
+        
+        const column = index % 4;
+        const row = Math.floor(index / 4);
+        return { x: column * 200, y: row * 250 };
+      },
+    })
+  );
+
   const renderPageThumbnail = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number): Promise<{url: string, width: number, height: number}> => {
     const page = await pdf.getPage(pageNum);
-    const scale = 0.5; // Kalite artırıldı (0.2 -> 0.5)
+    const scale = 0.5;
     const viewport = page.getViewport({ scale });
     
     const canvas = document.createElement('canvas');
@@ -114,7 +272,7 @@ export const PDFEdit = () => {
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const { url, width, height } = await renderPageThumbnail(pdf, pageNum);
           newPages.push({
-            id: `${currentFileCount + i}-${pageNum}`,
+            id: `pdf-${currentFileCount + i}-page-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             pdfIndex: currentFileCount + i,
             pageNumber: pageNum,
             rotation: 0,
@@ -132,7 +290,7 @@ export const PDFEdit = () => {
       console.error('PDF Yükleme Hatası:', error);
       toast({
         title: 'Hata',
-        description: `PDF yüklenirken hata: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`,
+        description: 'PDF yüklenirken hata oluştu.',
         variant: 'destructive',
       });
     } finally {
@@ -152,28 +310,39 @@ export const PDFEdit = () => {
     if (selectedPage === index) {
       setSelectedPage(prev => (prev && prev > 0 ? prev - 1 : null));
     } else if (selectedPage !== null && selectedPage > index) {
-      setSelectedPage(selectedPage - 1);
+      setSelectedPage(prev => (prev !== null ? prev - 1 : null));
     }
   }, [selectedPage]);
 
-  const movePage = useCallback((fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return;
+  const movePage = useCallback((oldIndex: number, newIndex: number) => {
+    setPages(prev => arrayMove(prev, oldIndex, newIndex));
     
-    setPages(prev => {
-      const newPages = [...prev];
-      const [movedPage] = newPages.splice(fromIndex, 1);
-      newPages.splice(toIndex, 0, movedPage);
-      return newPages;
-    });
-    
-    if (selectedPage === fromIndex) {
-      setSelectedPage(toIndex);
-    } else if (fromIndex < toIndex && selectedPage !== null && selectedPage > fromIndex && selectedPage <= toIndex) {
-      setSelectedPage(selectedPage - 1);
-    } else if (fromIndex > toIndex && selectedPage !== null && selectedPage < fromIndex && selectedPage >= toIndex) {
-      setSelectedPage(selectedPage + 1);
+    if (selectedPage === oldIndex) {
+      setSelectedPage(newIndex);
+    } else if (selectedPage !== null) {
+      if (oldIndex < newIndex && selectedPage > oldIndex && selectedPage <= newIndex) {
+        setSelectedPage(selectedPage - 1);
+      } else if (oldIndex > newIndex && selectedPage < oldIndex && selectedPage >= newIndex) {
+        setSelectedPage(selectedPage + 1);
+      }
     }
   }, [selectedPage]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = pages.findIndex(p => p.id === active.id);
+      const newIndex = pages.findIndex(p => p.id === over.id);
+      
+      movePage(oldIndex, newIndex);
+    }
+    setActiveId(null);
+  };
 
   const rotatePage = useCallback((index: number) => {
     setPages(prev => {
@@ -239,112 +408,12 @@ export const PDFEdit = () => {
       toast({ title: 'Başarılı', description: 'PDF başarıyla dışa aktarıldı.' });
     } catch (error) {
       console.error('Export Hatası:', error);
-      toast({ title: 'Hata', description: 'PDF dışa aktarılırken bir hata oluştu.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'PDF dışa aktarılırken hata oluştu.', variant: 'destructive' });
     } finally {
       setProcessing(false);
       setProgress(0);
     }
   }, [pages, files, toast]);
-
-  // Long Press ve Drag handlers - DÜZELTİLDİ
-  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent, index: number) => {
-    // Sadece sol tık veya touch ise başlat
-    if ('button' in e && e.button !== 0) return;
-    
-    isLongPress.current = false;
-    
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      setDraggedIndex(index);
-      setIsDragging(true);
-      
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 400); // 400ms daha hızlı tepki
-  };
-
-  const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if (!isDragging || draggedIndex === null) return;
-    
-    e.preventDefault();
-    
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const scrollContainer = thumbnailScrollRef.current;
-    
-    if (scrollContainer) {
-      const rect = scrollContainer.getBoundingClientRect();
-      const y = clientY - rect.top + scrollContainer.scrollTop;
-      
-      // Otomatik scroll (sınırda ise)
-      const relativeY = clientY - rect.top;
-      if (relativeY < 50 && scrollContainer.scrollTop > 0) {
-        scrollContainer.scrollTop -= 10;
-      } else if (relativeY > rect.height - 50) {
-        scrollContainer.scrollTop += 10;
-      }
-      
-      // Hangi index üzerinde olduğunu hesapla
-      const children = Array.from(scrollContainer.children);
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i] as HTMLElement;
-        const childTop = child.offsetTop;
-        const childBottom = childTop + child.offsetHeight;
-        
-        if (y >= childTop && y <= childBottom) {
-          if (dragOverIndex !== i) {
-            setDragOverIndex(i);
-          }
-          break;
-        }
-      }
-    }
-  };
-
-  const handleTouchEnd = (e?: React.TouchEvent | React.MouseEvent) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-    
-    if (isDragging && draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
-      movePage(draggedIndex, dragOverIndex);
-    }
-    
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-    setIsDragging(false);
-    isLongPress.current = false;
-  };
-
-  // HTML5 Drag Drop için desktop
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    setIsDragging(true);
-    e.dataTransfer.effectAllowed = 'move';
-    // Drag görselini ayarla
-    if (e.target instanceof HTMLElement) {
-      e.dataTransfer.setDragImage(e.target, 20, 20);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    if (draggedIndex !== null && draggedIndex !== index) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex !== null && draggedIndex !== dropIndex) {
-      movePage(draggedIndex, dropIndex);
-    }
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-    setIsDragging(false);
-  };
 
   useEffect(() => {
     if (selectedPage === null || !canvasRef.current || pages.length === 0) return;
@@ -392,23 +461,56 @@ export const PDFEdit = () => {
     renderSelectedPage();
   }, [selectedPage, pages, files]);
 
+  const activePage = activeId ? pages.find(p => p.id === activeId) : null;
+
   return (
-    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-7xl h-[calc(100vh-4rem)] flex flex-col">
+    <div className="container mx-auto px-4 py-6 max-w-7xl min-h-[calc(100vh-4rem)] flex flex-col gap-6">
       {/* Header */}
-      <div className="mb-3 sm:mb-6 flex-shrink-0">
-        <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2 sm:gap-3">
-          <div className="p-1.5 sm:p-2 bg-red-500 rounded-lg shadow-lg">
-            <FileEdit className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-red-500 rounded-lg shadow-lg">
+              <FileEdit className="w-6 h-6 text-white" />
+            </div>
+            PDF Düzenle
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            Sayfaları sürükleyip bırakarak yeniden sıralayın, döndürün ve düzenleyin.
+          </p>
+        </div>
+        
+        {pages.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => document.getElementById('add-pdf')?.click()}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              PDF Ekle
+            </Button>
+            <input
+              id="add-pdf"
+              type="file"
+              accept=".pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => e.target.files && handleFilesDrop(e.target.files)}
+            />
+            <Button 
+              onClick={handleExport} 
+              disabled={processing}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {processing ? 'İşleniyor...' : 'İndir'}
+            </Button>
           </div>
-          PDF Düzenle
-        </h1>
-        <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
-          PDF dosyalarınızı düzenleyin ve birleştirin.
-        </p>
+        )}
       </div>
 
-      {pages.length === 0 && (
-        <div className="flex-shrink-0">
+      {pages.length === 0 ? (
+        <div className="flex-1 flex flex-col justify-center">
           <FileDropzone
             onFilesDrop={handleFilesDrop}
             onClear={handleClear}
@@ -416,358 +518,175 @@ export const PDFEdit = () => {
             multiple={true}
             selectedFiles={[]}
           />
-          {processing && <div className="mt-4"><ProgressBar progress={progress} label="PDF yükleniyor..." /></div>}
+          {processing && (
+            <div className="mt-4">
+              <ProgressBar progress={progress} label="PDF yükleniyor..." />
+            </div>
+          )}
         </div>
-      )}
-
-      {pages.length > 0 && (
-        <div className="flex flex-col gap-3 flex-1 min-h-0">
-          {/* Ana Toolbar - 3D Butonlar */}
-          <Card className="flex-shrink-0 shadow-lg border-b-4 border-b-gray-200 dark:border-b-gray-800">
-            <CardContent className="p-2 sm:p-3">
-              {/* Mobil Toolbar */}
-              <div className="flex flex-col gap-2 sm:hidden">
-                <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    variant="outline" 
-                    className="flex flex-col items-center justify-center py-3 h-auto gap-1 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0"
-                    onClick={() => document.getElementById('add-pdf')?.click()}
-                  >
-                    <Plus className="w-5 h-5 text-primary" />
-                    <span className="text-[11px] font-bold">PDF Ekle</span>
-                  </Button>
-                  <input
-                    id="add-pdf"
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => e.target.files && handleFilesDrop(e.target.files)}
-                  />
-                  
-                  <Button 
-                    variant="outline" 
-                    className="flex flex-col items-center justify-center py-3 h-auto gap-1 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      rotateAllPages();
-                    }}
-                  >
-                    <RotateCw className="w-5 h-5 text-blue-600" />
-                    <span className="text-[11px] font-bold">Tümünü Çevir</span>
-                  </Button>
-                  
-                  <Button 
-                    variant="outline" 
-                    className="flex flex-col items-center justify-center py-3 h-auto gap-1 bg-gradient-to-b from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 shadow-md active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0"
-                    onClick={handleClear}
-                  >
-                    <X className="w-5 h-5" />
-                    <span className="text-[11px] font-bold">Temizle</span>
-                  </Button>
-                </div>
-                
-                <div className="flex items-center justify-between px-3 py-2 bg-muted rounded-lg border-2 shadow-inner">
-                  <span className="text-xs text-muted-foreground font-bold">
-                    Toplam {pages.length} sayfa
+      ) : (
+        <div className="flex flex-col lg:flex-row gap-6 flex-1">
+          {/* Sol Panel: Grid Görünümü */}
+          <Card className="flex-1 lg:flex-[2] overflow-hidden flex flex-col shadow-lg">
+            <CardContent className="p-4 flex flex-col h-full">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between mb-4 pb-4 border-b">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {pages.length} Sayfa
                   </span>
+                  <div className="h-4 w-px bg-border mx-2" />
                   <Button 
-                    onClick={handleExport} 
-                    disabled={processing} 
+                    variant="ghost" 
                     size="sm"
-                    className="h-9 px-6 bg-gradient-to-b from-primary to-primary/90 text-primary-foreground shadow-lg active:shadow active:translate-y-[2px] transition-all border-b-4 active:border-b-0 border-primary/50 font-bold"
+                    onClick={rotateAllPages}
+                    className="gap-2 text-xs"
                   >
-                    {processing ? (
-                      <span className="text-xs">İşleniyor...</span>
-                    ) : (
-                      <>
-                        <Download className="w-4 h-4 mr-2" />
-                        <span className="text-xs font-bold">İndir</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Masaüstü Toolbar - 3D Efektler */}
-              <div className="hidden sm:flex sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => document.getElementById('add-pdf')?.click()}
-                    className="gap-2 h-10 px-4 bg-gradient-to-b from-background to-muted shadow-md hover:shadow-lg active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0 font-bold"
-                  >
-                    <Plus className="w-4 h-4 text-primary" />
-                    PDF Ekle
-                  </Button>
-                  <input
-                    id="add-pdf"
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => e.target.files && handleFilesDrop(e.target.files)}
-                  />
-                  
-                  <div className="h-8 w-1 bg-gradient-to-b from-transparent via-border to-transparent" />
-                  
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      rotateAllPages();
-                    }}
-                    className="gap-2 h-10 px-4 bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 shadow-md hover:shadow-lg active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0 font-bold"
-                  >
-                    <RotateCw className="w-4 h-4" />
+                    <RotateCw className="w-3.5 h-3.5" />
                     Tümünü Döndür
                   </Button>
-                  
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={handleClear}
-                    className="gap-2 h-10 px-4 bg-gradient-to-b from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 shadow-md hover:shadow-lg active:shadow-sm active:translate-y-[2px] transition-all border-b-4 active:border-b-0 font-bold"
-                  >
-                    <X className="w-4 h-4" />
-                    Temizle
-                  </Button>
                 </div>
-
-                <div className="flex items-center gap-3 bg-gradient-to-b from-muted to-muted/80 px-4 py-2 rounded-lg border-2 shadow-inner">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">
-                    {pages.length} sayfa
-                  </span>
-                  <div className="h-6 w-px bg-gradient-to-b from-transparent via-border to-transparent" />
-                  <Button 
-                    onClick={handleExport} 
-                    disabled={processing} 
-                    size="sm"
-                    className="h-9 gap-2 font-bold bg-gradient-to-b from-primary to-primary/90 text-primary-foreground shadow-lg hover:shadow-xl active:shadow active:translate-y-[2px] transition-all border-b-4 active:border-b-0 border-primary/50 px-6"
-                  >
-                    <Download className="w-4 h-4" />
-                    {processing ? 'İşleniyor...' : 'İndir'}
-                  </Button>
-                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleClear}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 gap-2 text-xs"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Temizle
+                </Button>
               </div>
-              
+
+              {/* Drag & Drop Grid Container */}
+              <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext 
+                    items={pages.map(p => p.id)} 
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {pages.map((page, index) => (
+                        <SortablePageItem
+                          key={page.id}
+                          page={page}
+                          index={index}
+                          selected={selectedPage === index}
+                          onSelect={setSelectedPage}
+                          onRotate={rotatePage}
+                          onRemove={removePage}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+
+                  <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
+                    {activePage ? (
+                      <div className="flex flex-col gap-2 p-3 rounded-xl border-2 border-primary bg-white dark:bg-gray-900 shadow-2xl rotate-3 scale-105 opacity-90 cursor-grabbing">
+                        <div className="aspect-[210/297] w-full overflow-hidden rounded-lg bg-gray-100">
+                          <img
+                            src={activePage.thumbnail}
+                            alt="Sürüklenen sayfa"
+                            className="w-full h-full object-contain"
+                            style={{ transform: `rotate(${activePage.rotation}deg)` }}
+                          />
+                        </div>
+                        <div className="text-center text-xs font-bold text-primary">
+                          Taşınıyor...
+                        </div>
+                      </div>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </div>
+
               {processing && (
-                <div className="mt-3">
+                <div className="mt-4">
                   <ProgressBar progress={progress} label="PDF oluşturuluyor..." />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Ana İçerik Grid - KÜÇÜLTÜLMÜŞ THUMBNAIL'LER */}
-          <div className="flex-1 grid grid-cols-[90px_1fr] sm:grid-cols-[140px_1fr] lg:grid-cols-[160px_1fr] gap-3 min-h-0">
-            
-            {/* Sol: Thumbnail Listesi - Daha küçük */}
-            <Card className="h-full overflow-hidden flex flex-col shadow-lg border-b-4 border-b-gray-200 dark:border-b-gray-800">
-              <CardContent className="p-2 sm:p-2 flex flex-col h-full">
-                <h3 className="font-bold mb-2 text-xs shrink-0 text-center sm:text-left border-b pb-1 flex items-center justify-center sm:justify-start gap-1">
-                  <GripVertical className="w-3 h-3 text-muted-foreground" />
-                  Sayfalar
-                </h3>
-                <div 
-                  ref={thumbnailScrollRef}
-                  className="flex-1 flex flex-col gap-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 pr-0.5 select-none touch-none"
-                >
-                  {pages.map((page, index) => (
-                    <div
-                      key={page.id}
-                      onClick={() => !isDragging && !isLongPress.current && setSelectedPage(index)}
-                      onMouseDown={(e) => handleTouchStart(e, index)}
-                      onMouseMove={handleTouchMove}
-                      onMouseUp={handleTouchEnd}
-                      onMouseLeave={(e) => {
-                        if (isDragging) handleTouchEnd(e);
-                      }}
-                      onTouchStart={(e) => handleTouchStart(e, index)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
-                      onDrop={(e) => handleDrop(e, index)}
-                      onDragEnd={() => {
-                        setDraggedIndex(null);
-                        setDragOverIndex(null);
-                        setIsDragging(false);
-                      }}
-                      className={cn(
-                        'relative group cursor-grab active:cursor-grabbing rounded-lg border-2 transition-all flex-shrink-0 overflow-hidden select-none',
-                        'shadow-sm hover:shadow-md active:shadow-sm active:translate-y-[1px]',
-                        draggedIndex === index && 'opacity-40 scale-95 rotate-1 shadow-xl z-50',
-                        dragOverIndex === index && draggedIndex !== index && 'border-primary ring-2 ring-primary/20 scale-[1.03] bg-primary/5',
-                        selectedPage === index && !isDragging
-                          ? 'border-primary bg-primary/5 shadow-md' 
-                          : 'border-transparent bg-muted/50 hover:bg-muted'
-                      )}
+          {/* Sağ Panel: Önizleme */}
+          <Card className="lg:w-[400px] xl:w-[450px] flex flex-col shadow-lg">
+            <CardContent className="p-4 flex flex-col h-full">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Sayfa Önizleme
+              </h3>
+              
+              {selectedPage !== null ? (
+                <div className="flex flex-col h-full gap-4">
+                  <div className="flex items-center justify-between bg-muted rounded-lg p-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setSelectedPage(Math.max(0, selectedPage - 1))}
+                      disabled={selectedPage === 0}
                     >
-                      {/* Thumbnail Görseli - Daha kompakt */}
-                      <div className="w-full aspect-[210/297] relative overflow-hidden rounded-md bg-white pointer-events-none">
-                        <img
-                          src={page.thumbnail}
-                          alt={`Sayfa ${index + 1}`}
-                          className="w-full h-full object-contain"
-                          style={{ 
-                            transform: `rotate(${page.rotation}deg)`,
-                            pointerEvents: 'none'
-                          }}
-                          draggable={false}
-                        />
-                        
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[8px] sm:text-[10px] text-center py-0.5 font-bold">
-                          {index + 1}
-                        </div>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm font-medium">
+                      {selectedPage + 1} / {pages.length}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setSelectedPage(Math.min(pages.length - 1, selectedPage + 1))}
+                      disabled={selectedPage === pages.length - 1}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
 
-                        {selectedPage === index && !isDragging && (
-                          <div className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full border border-white shadow-sm" />
-                        )}
-                        
-                        {/* Drag indicator overlay */}
-                        {draggedIndex === index && (
-                          <div className="absolute inset-0 bg-primary/30 flex items-center justify-center">
-                            <span className="bg-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow">
-                              Sürükleniyor
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                  <div className="flex-1 bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center min-h-[400px] border border-gray-200 dark:border-gray-800">
+                    <canvas
+                      ref={canvasRef}
+                      className="max-w-full max-h-full shadow-lg bg-white rounded"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => rotatePage(selectedPage)}
+                      className="gap-2"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      90° Döndür
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => removePage(selectedPage)}
+                      className="gap-2 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Sayfayı Sil
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Sağ: Ana Görüntüleyici - 3D Butonlar */}
-            <Card className="h-full overflow-hidden flex flex-col shadow-lg border-b-4 border-b-gray-200 dark:border-b-gray-800">
-              <CardContent className="p-2 sm:p-4 h-full flex flex-col">
-                {selectedPage !== null ? (
-                  <div className="flex flex-col h-full gap-3">
-                    {/* Toolbar: Gezinme + İşlemler - 3D */}
-                    <div className="flex items-center justify-between shrink-0 px-3 py-3 bg-gradient-to-b from-muted to-muted/80 rounded-xl border-2 shadow-inner">
-                      {/* Sol: Sayfa Gezinme */}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedPage(Math.max(0, selectedPage - 1));
-                          }}
-                          disabled={selectedPage === 0}
-                        >
-                          <ChevronLeft className="w-5 h-5" />
-                        </Button>
-                        <span className="text-sm font-bold min-w-[80px] text-center bg-background rounded-lg border-2 shadow-inner px-3 py-2">
-                          {selectedPage + 1} / {pages.length}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedPage(Math.min(pages.length - 1, selectedPage + 1));
-                          }}
-                          disabled={selectedPage === pages.length - 1}
-                        >
-                          <ChevronRight className="w-5 h-5" />
-                        </Button>
-                      </div>
-
-                      {/* Sağ: Sayfa İşlemleri - 3D */}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all disabled:opacity-50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            movePage(selectedPage, selectedPage - 1);
-                          }}
-                          disabled={selectedPage === 0}
-                          title="Yukarı taşı"
-                        >
-                          <ArrowUp className="w-5 h-5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-background to-muted shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all disabled:opacity-50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            movePage(selectedPage, selectedPage + 1);
-                          }}
-                          disabled={selectedPage === pages.length - 1}
-                          title="Aşağı taşı"
-                        >
-                          <ArrowDown className="w-5 h-5" />
-                        </Button>
-                        <div className="w-1 h-8 bg-gradient-to-b from-transparent via-border to-transparent" />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all hover:from-blue-100 hover:to-blue-200"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (selectedPage !== null) {
-                              rotatePage(selectedPage);
-                            }
-                          }}
-                          title="Saat yönünde 90° döndür"
-                        >
-                          <RotateCw className="w-5 h-5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-10 w-10 bg-gradient-to-b from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 shadow-md active:shadow-sm active:translate-y-[2px] active:border-b-0 border-b-4 transition-all hover:from-red-100 hover:to-red-200"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removePage(selectedPage);
-                          }}
-                          title="Sayfayı sil"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Canvas Container */}
-                    <div className="flex-1 relative bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center min-h-0 shadow-inner border-2 border-gray-200 dark:border-gray-800">
-                      <canvas
-                        ref={canvasRef}
-                        className="max-w-full max-h-full shadow-2xl object-contain bg-white rounded-lg"
-                        style={{
-                          maxHeight: '95%',
-                          maxWidth: '95%'
-                        }}
-                      />
-                    </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <FileText className="w-8 h-8 opacity-50" />
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-b from-muted to-muted/50 flex items-center justify-center mb-4 shadow-inner border-2">
-                      <FileText className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground/50" />
-                    </div>
-                    <p className="text-muted-foreground text-sm sm:text-base font-bold">
-                      Görüntülemek için bir sayfa seçin
-                    </p>
-                    <p className="text-xs text-muted-foreground/70 mt-2 font-medium">
-                      Soldaki listeden sayfa sürükleyerek sıralayabilirsiniz
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  <p className="font-medium">Görüntülemek için bir sayfa seçin</p>
+                  <p className="text-sm mt-2 opacity-70">
+                    Soldaki listeden bir sayfa seçerek detayları görüntüleyebilirsiniz
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
