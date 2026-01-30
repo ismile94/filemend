@@ -16,8 +16,10 @@ import { useFFmpeg } from '@/hooks/useFFmpeg';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
 import { AUDIO_FORMATS } from '@/types';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const AudioConvert: React.FC = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [outputFormat, setOutputFormat] = useState('mp3');
   const [converting, setConverting] = useState(false);
@@ -28,8 +30,8 @@ export const AudioConvert: React.FC = () => {
     if (!loaded && !loading) {
       loadFFmpeg().catch(() => {
         toast({
-          title: 'Hata',
-          description: 'FFmpeg yüklenirken bir hata oluştu.',
+          title: t.messages.error,
+          description: t.messages.ffmpegError,
           variant: 'destructive',
         });
       });
@@ -46,8 +48,8 @@ export const AudioConvert: React.FC = () => {
 
     if (!audioFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir ses dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.audioFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -73,13 +75,13 @@ export const AudioConvert: React.FC = () => {
       downloadBlob(blob, outputName);
       
       toast({
-        title: 'Başarılı',
-        description: 'Ses dosyası başarıyla dönüştürüldü.',
+        title: t.messages.success,
+        description: `${t.audioConvert.audioPrefix}${t.messages.fileConverted}`,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Ses dönüştürme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: `${t.audioConvert.audioPrefix}${t.messages.processingError}`,
         variant: 'destructive',
       });
     } finally {
@@ -96,10 +98,10 @@ export const AudioConvert: React.FC = () => {
           <div className="p-2 bg-blue-500 rounded-lg">
             <Music className="w-6 h-6 text-white" />
           </div>
-          Ses Dönüştür
+          {t.audioConvert.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Ses dosyalarınızı farklı formatlara dönüştürün.
+          {t.audioConvert.description}
         </p>
       </div>
 
@@ -108,7 +110,7 @@ export const AudioConvert: React.FC = () => {
           <CardContent className="p-4 flex items-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
             <p className="text-sm text-yellow-700 dark:text-yellow-400">
-              Ses işleme kütüphanesi yükleniyor... Lütfen bekleyin.
+              {t.audioConvert.loadingLibrary}
             </p>
           </CardContent>
         </Card>
@@ -137,11 +139,11 @@ export const AudioConvert: React.FC = () => {
 
             <div className="mb-6">
               <Label htmlFor="format" className="text-base font-medium mb-2 block">
-                Çıktı Formatı
+                {t.audioConvert.outputFormat}
               </Label>
               <Select value={outputFormat} onValueChange={setOutputFormat}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Format seçin" />
+                  <SelectValue placeholder={t.audioConvert.selectFormat} />
                 </SelectTrigger>
                 <SelectContent>
                   {AUDIO_FORMATS.map((format) => (
@@ -157,7 +159,7 @@ export const AudioConvert: React.FC = () => {
               <div className="mb-6">
                 <ProgressBar 
                   progress={loading ? 0 : progress} 
-                  label={loading ? 'Yükleniyor...' : 'Dönüştürülüyor...'} 
+                  label={loading ? t.audioConvert.loading : t.audioConvert.converting} 
                 />
               </div>
             )}
@@ -169,11 +171,11 @@ export const AudioConvert: React.FC = () => {
               size="lg"
             >
               {isProcessing ? (
-                'İşleniyor...'
+                t.audioConvert.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Ses Dönüştür ve İndir
+                  {t.audioConvert.convertAndDownload}
                 </>
               )}
             </Button>

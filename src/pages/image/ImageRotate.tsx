@@ -9,10 +9,12 @@ import { useImage } from '@/hooks/useImage';
 import { useToast } from '@/hooks/use-toast';
 import { formatFileSize } from '@/utils/fileHelpers';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 type RotationDegree = 90 | 180 | 270;
 
 export const ImageRotate = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [rotation, setRotation] = useState<RotationDegree>(90);
@@ -29,8 +31,8 @@ export const ImageRotate = () => {
 
     if (!imageFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir görüntü dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.imageFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -65,22 +67,22 @@ export const ImageRotate = () => {
       URL.revokeObjectURL(url);
       
       toast({
-        title: 'Başarılı',
-        description: 'Görüntü başarıyla döndürüldü.',
+        title: t.messages.success,
+        description: t.imageRotate.imageRotated,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Görüntü döndürme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.imageRotate.rotateError,
         variant: 'destructive',
       });
     }
   };
 
   const rotationOptions: { value: RotationDegree; label: string; icon: React.ElementType }[] = [
-    { value: 90, label: '90° Saat Yönünde', icon: Redo2 },
-    { value: 180, label: '180°', icon: RotateCw },
-    { value: 270, label: '90° Saat Yönünün Tersine', icon: Undo2 },
+    { value: 90, label: t.imageRotate.clockwise90, icon: Redo2 },
+    { value: 180, label: t.imageRotate.degrees180, icon: RotateCw },
+    { value: 270, label: t.imageRotate.counterClockwise90, icon: Undo2 },
   ];
 
   return (
@@ -90,10 +92,10 @@ export const ImageRotate = () => {
           <div className="p-2 bg-green-500 rounded-lg">
             <RotateCw className="w-6 h-6 text-white" />
           </div>
-          Görüntü Döndür
+          {t.imageRotate.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Görüntülerinizi istediğiniz açıda döndürün.
+          {t.imageRotate.description}
         </p>
       </div>
 
@@ -120,7 +122,7 @@ export const ImageRotate = () => {
 
             {preview && (
               <div className="mb-6">
-                <Label className="mb-2 block">Önizleme</Label>
+                <Label className="mb-2 block">{t.imageConvert.preview}</Label>
                 <div className="aspect-video bg-muted rounded-lg overflow-hidden flex items-center justify-center">
                   <img
                     src={preview}
@@ -137,7 +139,7 @@ export const ImageRotate = () => {
             )}
 
             <div className="mb-6">
-              <Label className="text-base font-medium mb-4 block">Döndürme Açısı</Label>
+              <Label className="text-base font-medium mb-4 block">{t.imageRotate.rotationAngle}</Label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {rotationOptions.map((option) => (
                   <button
@@ -159,7 +161,7 @@ export const ImageRotate = () => {
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Döndürülüyor..." />
+                <ProgressBar progress={progress} label={t.imageRotate.rotating} />
               </div>
             )}
 
@@ -170,11 +172,11 @@ export const ImageRotate = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.imageRotate.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Görüntü Döndür ve İndir
+                  {t.imageRotate.rotateAndDownload}
                 </>
               )}
             </Button>

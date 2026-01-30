@@ -7,8 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { usePDF } from '@/hooks/usePDF';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const PDFMerge = () => {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<File[]>([]);
   const { mergePDFs, processing, progress } = usePDF();
   const { toast } = useToast();
@@ -20,8 +22,8 @@ export const PDFMerge = () => {
     
     if (pdfFiles.length === 0) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen sadece PDF dosyaları yükleyin.',
+        title: t.messages.error,
+        description: t.pdfMerge.onlyPdfFiles,
         variant: 'destructive',
       });
       return;
@@ -53,8 +55,8 @@ export const PDFMerge = () => {
   const handleMerge = async () => {
     if (files.length < 2) {
       toast({
-        title: 'Hata',
-        description: 'En az 2 PDF dosyası seçmelisiniz.',
+        title: t.messages.error,
+        description: t.pdfMerge.minFilesError,
         variant: 'destructive',
       });
       return;
@@ -64,13 +66,13 @@ export const PDFMerge = () => {
       const blob = await mergePDFs(files);
       downloadBlob(blob, 'birlesik.pdf');
       toast({
-        title: 'Başarılı',
-        description: 'PDF dosyaları başarıyla birleştirildi.',
+        title: t.messages.success,
+        description: t.pdfMerge.filesMerged,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'PDF birleştirme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.pdfMerge.mergeError,
         variant: 'destructive',
       });
     }
@@ -83,10 +85,10 @@ export const PDFMerge = () => {
           <div className="p-2 bg-red-500 rounded-lg">
             <Merge className="w-6 h-6 text-white" />
           </div>
-          PDF Birleştir
+          {t.pdfMerge.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Birden fazla PDF dosyasını tek bir dosyada birleştirin.
+          {t.pdfMerge.description}
         </p>
       </div>
 
@@ -102,9 +104,9 @@ export const PDFMerge = () => {
         <Card className="mt-6">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Sıralama (Sürükle-bırak ile sıralayın)</h3>
+              <h3 className="font-semibold">{t.pdfMerge.sorting}</h3>
               <span className="text-sm text-muted-foreground">
-                {files.length} dosya
+                {t.pdfMerge.filesCount.replace('{count}', files.length.toString())}
               </span>
             </div>
 
@@ -158,7 +160,7 @@ export const PDFMerge = () => {
 
             {processing && (
               <div className="mt-6">
-                <ProgressBar progress={progress} label="Birleştiriliyor..." />
+                <ProgressBar progress={progress} label={t.pdfMerge.merging} />
               </div>
             )}
 
@@ -169,11 +171,11 @@ export const PDFMerge = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.pdfMerge.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  PDF Birleştir ve İndir
+                  {t.pdfMerge.mergeAndDownload}
                 </>
               )}
             </Button>

@@ -3,6 +3,7 @@ import { Upload, File, X } from 'lucide-react';
 import { useDragDrop } from '@/hooks/useDragDrop';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 interface FileDropzoneProps {
   onFilesDrop: (files: FileList) => void;
@@ -23,6 +24,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
   selectedFiles = [],
   className,
 }) => {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop, handleFileInput } = useDragDrop({
     onFilesDrop,
@@ -75,11 +77,11 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
             </div>
             <div className="text-center">
               <p className="text-lg font-medium">
-                {isDragging ? 'Dosyaları buraya bırakın' : 'Dosyaları sürükleyin veya seçin'}
+                {isDragging ? t.dropzone.dragText : t.dropzone.dropTextActive}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                {multiple ? 'Birden fazla dosya seçebilirsiniz' : 'Tek bir dosya seçin'}
-                {maxFiles && ` (en fazla ${maxFiles})`}
+                {multiple ? t.dropzone.multipleFiles : t.dropzone.singleFile}
+                {maxFiles && ` ${t.dropzone.maxFiles.replace('{count}', String(maxFiles))}`}
               </p>
             </div>
           </>
@@ -87,7 +89,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
           <div className="w-full">
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-medium">
-                {selectedFiles.length} dosya seçildi
+                {t.dropzone.filesSelected.replace('{count}', String(selectedFiles.length))}
               </span>
               {onClear && (
                 <Button
@@ -99,7 +101,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
                   }}
                 >
                   <X className="w-4 h-4 mr-1" />
-                  Temizle
+                  {t.dropzone.clear}
                 </Button>
               )}
             </div>
@@ -113,7 +115,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                      {t.dropzone.fileSize.replace('{size}', (file.size / 1024 / 1024).toFixed(2))}
                     </p>
                   </div>
                 </div>

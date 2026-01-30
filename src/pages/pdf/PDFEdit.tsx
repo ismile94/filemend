@@ -1,26 +1,35 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   FileEdit, 
   Download, 
-  FileText, 
   Trash2, 
   RotateCw,
   Plus,
-  X,
   ChevronLeft,
   ChevronRight,
-  GripHorizontal
+  File,
+  Grid3X3,
+  Layers,
+  Undo2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  FileDigit,
+  Type,
+  SortAsc,
+  SortDesc,
+  RotateCcw
 } from 'lucide-react';
 import { FileDropzone } from '@/components/FileDropzone';
 import { ProgressBar } from '@/components/ProgressBar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, degrees } from 'pdf-lib';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 // Dnd Kit imports
 import {
@@ -43,9 +52,33 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@/components/ui/dropdown-menu';
 
-// PDF.js worker
+// {t.comments.pdfWorkerConfigured}
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+type ViewMode = 'pages' | 'files';
+type SortOrder = 'asc' | 'desc';
+
+// History action types
+type HistoryAction = 
+  | { type: 'ADD_FILE'; data: { files: PDFFile[]; pages: PDFPage[] } }
+  | { type: 'REMOVE_FILE'; data: { index: number; file: PDFFile; pages: PDFPage[] } }
+  | { type: 'REORDER_FILES'; data: { oldOrder: PDFFile[]; oldPages: PDFPage[] } }
+  | { type: 'ROTATE_FILE'; data: { fileIndex: number; oldRotations: Map<string, number> } }
+  | { type: 'REMOVE_PAGE'; data: { index: number; page: PDFPage } }
+  | { type: 'ROTATE_PAGE'; data: { index: number; oldRotation: number } }
+  | { type: 'REORDER_PAGES'; data: { oldPages: PDFPage[] } }
+  | { type: 'ROTATE_ALL_PAGES'; data: { oldRotations: number[] } };
 
 interface PDFPage {
   id: string;
@@ -61,16 +94,17 @@ interface PDFFile {
   file: File;
   pdf: pdfjsLib.PDFDocumentProxy;
   pageCount: number;
+  id: string;
 }
 
-// ==================== SortablePageItem Bileşeni ====================
+// {t.comments.sortablePageComponent}
 interface SortablePageProps {
   page: PDFPage;
   index: number;
   selected: boolean;
   onSelect: (index: number) => void;
-  onRotate: (index: number) => void;
   onRemove: (index: number) => void;
+  t: any;
 }
 
 const SortablePageItem = ({ 
@@ -78,8 +112,8 @@ const SortablePageItem = ({
   index, 
   selected, 
   onSelect, 
-  onRotate, 
-  onRemove 
+  onRemove,
+  t
 }: SortablePageProps) => {
   const {
     attributes,
@@ -105,26 +139,21 @@ const SortablePageItem = ({
   return (
     <div
       ref={setNodeRef}
+      {...attributes} 
+      {...listeners}
       style={style}
       className={cn(
-        'group relative flex flex-col gap-2 p-3 rounded-xl border-2 bg-white dark:bg-gray-900 cursor-grab active:cursor-grabbing transition-all duration-200',
+        'group relative flex flex-col gap-0.5 p-1 sm:p-1.5 rounded-lg border-2 bg-white dark:bg-gray-900 cursor-grab active:cursor-grabbing transition-all duration-200',
         selected 
           ? 'border-primary ring-2 ring-primary/20 shadow-md' 
-          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700',
-        isDragging && 'opacity-50 scale-105 rotate-2 shadow-2xl ring-2 ring-primary',
-        !isDragging && 'hover:shadow-lg hover:-translate-y-1'
+          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300',
+        isDragging && 'opacity-50 scale-105 rotate-2 shadow-2xl ring-2 ring-primary'
       )}
+      onClick={() => !isDragging && onSelect(index)}
     >
-      {/* Toolbar - Üst kısım (Sürükleme ve İşlemler) */}
-      <div className="flex items-center justify-between gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-        <div 
-          {...attributes} 
-          {...listeners}
-          className="p-1.5 rounded-md bg-muted hover:bg-muted-foreground/20 cursor-grab active:cursor-grabbing touch-none"
-        >
-          <GripHorizontal className="w-3 h-3 text-muted-foreground" />
-        </div>
-        <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+      {/* {t.comments.mobileOptimized} */}
+      <div className="flex items-center justify-between gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity sm:opacity-100 sm:group-hover:opacity-100">
+        <span className="text-[7px] sm:text-[9px] font-bold text-muted-foreground bg-muted px-1 sm:px-1.5 py-0.5 rounded-full">
           {index + 1}
         </span>
         <button
@@ -132,87 +161,189 @@ const SortablePageItem = ({
             e.stopPropagation();
             onRemove(index);
           }}
-          className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors"
+          className="p-0.5 sm:p-1 rounded hover:bg-red-100 text-red-600 transition-colors"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
         </button>
       </div>
 
-      {/* Thumbnail Container */}
-      <div 
-        className="relative aspect-[210/297] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-        onClick={() => onSelect(index)}
-      >
+      {/* Thumbnail - Yüksek kalite */}
+      <div className="relative aspect-[210/297] w-full overflow-hidden rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 pointer-events-none">
         <img
           src={page.thumbnail}
-          alt={`Sayfa ${index + 1}`}
-          className="w-full h-full object-contain pointer-events-none transition-transform duration-300"
+          alt={`${t.ui.pageText} ${index + 1}`}
+          className="w-full h-full object-contain image-pixelated"
           style={{ 
-            transform: `rotate(${page.rotation}deg) scale(1.1)`,
+            transform: `rotate(${page.rotation}deg)`,
+            imageRendering: 'crisp-edges'
           }}
           draggable={false}
         />
         
-        {/* Seçim İndikatörü */}
         {selected && (
-          <div className="absolute inset-0 bg-primary/10 pointer-events-none flex items-center justify-center">
-            <div className="bg-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-              Seçili
+          <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+            <div className="bg-primary text-white text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full">
+              {t.pdfEdit.selected}
             </div>
           </div>
         )}
-      </div>
-
-      {/* Alt Butonlar */}
-      <div className="flex items-center justify-between gap-2">
-        <button
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation();
-            onRotate(index);
-          }}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-300 transition-colors active:scale-95"
-        >
-          <RotateCw className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Döndür</span>
-        </button>
       </div>
     </div>
   );
 };
 
-// ==================== Ana PDFEdit Bileşeni ====================
+// {t.comments.sortableFileComponent}
+interface SortableFileProps {
+  file: PDFFile;
+  fileIndex: number;
+  thumbnail?: string;
+  selected: boolean;
+  onSelect: (index: number) => void;
+  onRemove: (index: number) => void;
+  pageCount: number;
+  t: any;
+}
+
+const SortableFileItem = ({
+  file,
+  fileIndex,
+  thumbnail,
+  selected,
+  onSelect,
+  onRemove,
+  pageCount,
+  t
+}: SortableFileProps) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: `file-${file.id}`,
+    transition: {
+      duration: 150,
+      easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+    },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes} 
+      {...listeners}
+      style={style}
+      className={cn(
+        'group relative flex flex-col gap-1.5 sm:gap-2 p-1.5 sm:p-3 rounded-xl border-2 bg-white dark:bg-gray-900 cursor-grab active:cursor-grabbing transition-all duration-200',
+        selected 
+          ? 'border-primary ring-2 ring-primary/20 shadow-md' 
+          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300',
+        isDragging && 'opacity-50 scale-105 rotate-2 shadow-2xl ring-2 ring-primary'
+      )}
+      onClick={() => !isDragging && onSelect(fileIndex)}
+    >
+      {/* {t.comments.mobileCompact} */}
+      <div className="flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] sm:text-xs font-semibold truncate" title={file.file.name}>
+            {file.file.name}
+          </p>
+          <p className="text-[8px] sm:text-[10px] text-muted-foreground">
+            {pageCount} s • {(file.file.size / 1024 / 1024).toFixed(1)} MB
+          </p>
+        </div>
+        <button
+          onClick={(e: React.MouseEvent) => {
+            e.stopPropagation();
+            onRemove(fileIndex);
+          }}
+          className="p-0.5 sm:p-1 rounded hover:bg-red-100 text-red-600 transition-colors shrink-0"
+        >
+          <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+        </button>
+      </div>
+
+      {/* Thumbnail - Yüksek kalite */}
+      <div className="relative aspect-[210/297] w-full overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 pointer-events-none">
+        {thumbnail ? (
+          <img
+            src={thumbnail}
+            alt={`${file.file.name} - Önizleme`}
+            className="w-full h-full object-contain"
+            style={{ imageRendering: 'crisp-edges' }}
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-1">
+            <File className="w-6 h-6 sm:w-8 sm:h-8 opacity-50" />
+            <span className="text-[9px] sm:text-[10px]">{t.ui.noPreview}</span>
+          </div>
+        )}
+        
+        {selected && (
+          <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+            <div className="bg-primary text-white text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full">
+              {t.pdfEdit.selected}
+            </div>
+          </div>
+        )}
+
+        <div className="absolute bottom-1 right-1 sm:bottom-1.5 sm:right-1.5 bg-black/70 text-white text-[8px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded backdrop-blur-sm">
+          {pageCount}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// {t.comments.mainPdfEditComponent}
 export const PDFEdit = () => {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<PDFFile[]>([]);
   const [pages, setPages] = useState<PDFPage[]>([]);
-  const [selectedPage, setSelectedPage] = useState<number | null>(null);
+  const [, setSelectedPage] = useState<number | null>(null);
+  const [selectedFile, setSelectedFile] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('files');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  
+  // {t.comments.gridContainerRef}
+  const gridRef = useRef<HTMLDivElement>(null);
+  
+  // {t.comments.historyState}
+  const [history, setHistory] = useState<HistoryAction[]>([]);
+  
+  // {t.comments.modalStates}
+  const [isPageModalOpen, setIsPageModalOpen] = useState(false);
+  const [isFileModalOpen, setIsFileModalOpen] = useState(false);
+  const [modalPageIndex, setModalPageIndex] = useState<number | null>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
-  // Dnd Kit Sensors
+  // {t.comments.mobileDragFix}
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
+      activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 250,
+      activationConstraint: { 
+        delay: 200, // {t.comments.mobileOptimized}
         tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
-      coordinateGetter: (_, { context }) => {
-        const { active, over } = context;
-        if (!active || !over) return { x: 0, y: 0 };
-        
-        const index = pages.findIndex(p => p.id === active.id);
+      coordinateGetter: (_event, { active }) => {
+        const index = pages.findIndex(p => p.id === active);
         if (index === -1) return { x: 0, y: 0 };
-        
         const column = index % 4;
         const row = Math.floor(index / 4);
         return { x: column * 200, y: row * 250 };
@@ -220,20 +351,262 @@ export const PDFEdit = () => {
     })
   );
 
+  // {t.comments.dragScrollPrevention}
+  useEffect(() => {
+    const gridElement = gridRef.current;
+    
+    if (activeId) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+      
+      if (gridElement) {
+        gridElement.style.overflowY = 'hidden';
+        gridElement.style.touchAction = 'none';
+      }
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      
+      if (gridElement) {
+        gridElement.style.overflowY = '';
+        gridElement.style.touchAction = '';
+      }
+    }
+    
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      if (gridElement) {
+        gridElement.style.overflowY = '';
+        gridElement.style.touchAction = '';
+      }
+    };
+  }, [activeId]);
+
+  // {t.comments.historySystem}
+  
+  const addToHistory = useCallback((action: HistoryAction) => {
+    setHistory(prev => [...prev, action]);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+    
+    const lastAction = history[history.length - 1];
+    const remainingHistory = history.slice(0, -1);
+    
+    switch (lastAction.type) {
+      case 'ADD_FILE':
+        const addedFileIds = lastAction.data.files.map(f => f.id);
+        setFiles(prev => prev.filter(f => !addedFileIds.includes(f.id)));
+        setPages(prev => prev.filter(p => !lastAction.data.pages.some(lp => lp.id === p.id)));
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.addFileCanceled });
+        break;
+        
+      case 'REMOVE_FILE':
+        const { index, file, pages: removedPages } = lastAction.data;
+        setFiles(prev => {
+          const newFiles = [...prev];
+          newFiles.splice(index, 0, file);
+          return newFiles;
+        });
+        setPages(prev => [...prev, ...removedPages]);
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.fileRemoved });
+        break;
+        
+      case 'REORDER_FILES':
+        setFiles(lastAction.data.oldOrder);
+        setPages(lastAction.data.oldPages);
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.sortingReverted });
+        break;
+        
+      case 'ROTATE_FILE':
+        const { fileIndex: rotFileIdx, oldRotations } = lastAction.data;
+        setPages(prev => prev.map(p => {
+          if (p.pdfIndex === rotFileIdx) {
+            const oldRotation = oldRotations.get(p.id) || 0;
+            return { ...p, rotation: oldRotation as 0 | 90 | 180 | 270 };
+          }
+          return p;
+        }));
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.rotationCanceled });
+        break;
+        
+      case 'REMOVE_PAGE':
+        const { index: rmPageIdx, page: removedPage } = lastAction.data;
+        setPages(prev => {
+          const newPages = [...prev];
+          newPages.splice(rmPageIdx, 0, removedPage);
+          return newPages;
+        });
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.pageRemoved });
+        break;
+        
+      case 'ROTATE_PAGE':
+        const { index: rotPageIdx, oldRotation } = lastAction.data;
+        setPages(prev => {
+          const newPages = [...prev];
+          if (newPages[rotPageIdx]) {
+            newPages[rotPageIdx] = { ...newPages[rotPageIdx], rotation: oldRotation as 0 | 90 | 180 | 270 };
+          }
+          return newPages;
+        });
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.rotationCanceled });
+        break;
+        
+      case 'REORDER_PAGES':
+        setPages(lastAction.data.oldPages);
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.pageSortingReverted });
+        break;
+        
+      case 'ROTATE_ALL_PAGES':
+        setPages(prev => prev.map((p, i) => ({
+          ...p,
+          rotation: (lastAction.data.oldRotations[i] || 0) as 0 | 90 | 180 | 270
+        })));
+        toast({ title: t.pdfEdit.undoAction, description: t.pdfEdit.batchRotationCanceled });
+        break;
+    }
+    
+    setHistory(remainingHistory);
+  }, [history, toast]);
+
+  // {t.comments.sortingFunctions}
+  
+  const sortFilesByName = (order: SortOrder) => {
+    if (files.length < 2) return;
+    
+    addToHistory({ type: 'REORDER_FILES', data: { oldOrder: [...files], oldPages: [...pages] } });
+    
+    const sortedFiles = [...files].sort((a, b) => {
+      const comparison = a.file.name.localeCompare(b.file.name, 'tr');
+      return order === 'asc' ? comparison : -comparison;
+    });
+    
+    const newPages = [...pages];
+    sortedFiles.forEach((file, newIndex) => {
+      const oldIndex = files.findIndex(f => f.id === file.id);
+      newPages.filter(p => p.pdfIndex === oldIndex).forEach(p => { p.pdfIndex = newIndex; });
+    });
+    
+    setFiles(sortedFiles);
+    setPages(newPages.sort((a, b) => {
+      if (a.pdfIndex !== b.pdfIndex) return a.pdfIndex - b.pdfIndex;
+      return a.pageNumber - b.pageNumber;
+    }));
+    
+    toast({ title: t.pdfEdit.sorted, description: t.pdfEdit.sortedByName.replace('{order}', order === 'asc' ? t.pdfEdit.ascendingOrder : t.pdfEdit.descendingOrder) });
+  };
+
+  const sortFilesByPageCount = (order: SortOrder) => {
+    if (files.length < 2) return;
+    
+    addToHistory({ type: 'REORDER_FILES', data: { oldOrder: [...files], oldPages: [...pages] } });
+    
+    const sortedFiles = [...files].sort((a, b) => {
+      const comparison = a.pageCount - b.pageCount;
+      return order === 'asc' ? comparison : -comparison;
+    });
+    
+    const newPages = [...pages];
+    sortedFiles.forEach((file, newIndex) => {
+      const oldIndex = files.findIndex(f => f.id === file.id);
+      newPages.filter(p => p.pdfIndex === oldIndex).forEach(p => { p.pdfIndex = newIndex; });
+    });
+    
+    setFiles(sortedFiles);
+    setPages(newPages.sort((a, b) => {
+      if (a.pdfIndex !== b.pdfIndex) return a.pdfIndex - b.pdfIndex;
+      return a.pageNumber - b.pageNumber;
+    }));
+    
+    toast({ title: t.pdfEdit.sorted, description: t.pdfEdit.sortedByPageCount.replace('{order}', order === 'asc' ? t.pdfEdit.actions.ascending : t.pdfEdit.actions.descending) });
+  };
+
+  const sortFilesBySize = (order: SortOrder) => {
+    if (files.length < 2) return;
+    
+    addToHistory({ type: 'REORDER_FILES', data: { oldOrder: [...files], oldPages: [...pages] } });
+    
+    const sortedFiles = [...files].sort((a, b) => {
+      const comparison = a.file.size - b.file.size;
+      return order === 'asc' ? comparison : -comparison;
+    });
+    
+    const newPages = [...pages];
+    sortedFiles.forEach((file, newIndex) => {
+      const oldIndex = files.findIndex(f => f.id === file.id);
+      newPages.filter(p => p.pdfIndex === oldIndex).forEach(p => { p.pdfIndex = newIndex; });
+    });
+    
+    setFiles(sortedFiles);
+    setPages(newPages.sort((a, b) => {
+      if (a.pdfIndex !== b.pdfIndex) return a.pdfIndex - b.pdfIndex;
+      return a.pageNumber - b.pageNumber;
+    }));
+    
+    toast({ title: t.pdfEdit.sorted, description: t.pdfEdit.sortedBySize.replace('{order}', order === 'asc' ? t.pdfEdit.sizeAscending : t.pdfEdit.sizeDescending) });
+  };
+
+  const sortPagesByNumber = (order: SortOrder) => {
+    if (pages.length < 2) return;
+    
+    addToHistory({ type: 'REORDER_PAGES', data: { oldPages: [...pages] } });
+    
+    const sortedPages = [...pages].sort((a, b) => {
+      if (a.pdfIndex !== b.pdfIndex) {
+        return order === 'asc' ? a.pdfIndex - b.pdfIndex : b.pdfIndex - a.pdfIndex;
+      }
+      const comparison = a.pageNumber - b.pageNumber;
+      return order === 'asc' ? comparison : -comparison;
+    });
+    
+    setPages(sortedPages);
+    toast({ title: t.pdfEdit.sorted, description: t.pdfEdit.sortedByPageNumber.replace('{order}', order === 'asc' ? t.pdfEdit.numericAscending : t.pdfEdit.numericDescending) });
+  };
+
+  const sortPagesByFileName = (order: SortOrder) => {
+    if (pages.length < 2) return;
+    
+    addToHistory({ type: 'REORDER_PAGES', data: { oldPages: [...pages] } });
+    
+    const sortedPages = [...pages].sort((a, b) => {
+      const fileA = files[a.pdfIndex];
+      const fileB = files[b.pdfIndex];
+      if (!fileA || !fileB) return 0;
+      
+      const comparison = fileA.file.name.localeCompare(fileB.file.name, 'tr');
+      if (comparison !== 0) return order === 'asc' ? comparison : -comparison;
+      return a.pageNumber - b.pageNumber;
+    });
+    
+    setPages(sortedPages);
+    toast({ title: t.pdfEdit.sorted, description: t.pdfEdit.sortedByFileName.replace('{order}', order === 'asc' ? t.pdfEdit.ascendingOrder : t.pdfEdit.descendingOrder) });
+  };
+
+  // {t.comments.highQualityThumbnail}
   const renderPageThumbnail = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number): Promise<{url: string, width: number, height: number}> => {
     const page = await pdf.getPage(pageNum);
-    const scale = 0.5;
+    const scale = 1.5; // {t.comments.sharpRendering}
     const viewport = page.getViewport({ scale });
     
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d')!;
+    const context = canvas.getContext('2d', { alpha: false })!; // Alpha false = performans
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     
-    await page.render({ canvasContext: context, viewport }).promise;
+    // {t.comments.sharpRendering}
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    
+    await page.render({ 
+      canvasContext: context, 
+      viewport,
+      background: 'white' // {t.comments.whiteBackground}
+    }).promise;
     
     return { 
-      url: canvas.toDataURL(), 
+      url: canvas.toDataURL('image/jpeg', 0.92), // {t.comments.jpegQualityBalance}
       width: page.getViewport({ scale: 1 }).width,
       height: page.getViewport({ scale: 1 }).height
     };
@@ -245,7 +618,7 @@ export const PDFEdit = () => {
     );
     
     if (pdfFiles.length === 0) {
-      toast({ title: 'Hata', description: 'Lütfen sadece PDF dosyaları yükleyin.', variant: 'destructive' });
+      toast({ title: t.messages.error, description: `${t.messages.pleaseUpload} ${t.messages.pdfFiles} ${t.messages.filesUpload}`, variant: 'destructive' });
       return;
     }
 
@@ -254,25 +627,28 @@ export const PDFEdit = () => {
 
     try {
       const currentFileCount = files.length;
+      const newFiles: PDFFile[] = [];
+      const newPages: PDFPage[] = [];
       
       for (let i = 0; i < pdfFiles.length; i++) {
         const file = pdfFiles[i];
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         
+        const fileId = `file-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`;
         const newFile: PDFFile = {
+          id: fileId,
           file,
           pdf,
           pageCount: pdf.numPages
         };
         
-        setFiles(prev => [...prev, newFile]);
+        newFiles.push(newFile);
 
-        const newPages: PDFPage[] = [];
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const { url, width, height } = await renderPageThumbnail(pdf, pageNum);
           newPages.push({
-            id: `pdf-${currentFileCount + i}-page-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `page-${fileId}-${pageNum}`,
             pdfIndex: currentFileCount + i,
             pageNumber: pageNum,
             rotation: 0,
@@ -281,52 +657,136 @@ export const PDFEdit = () => {
             height
           });
         }
-        setPages(prev => [...prev, ...newPages]);
         setProgress(Math.round(((i + 1) / pdfFiles.length) * 100));
       }
       
-      toast({ title: 'Başarılı', description: `${pdfFiles.length} PDF dosyası yüklendi.` });
+      addToHistory({ type: 'ADD_FILE', data: { files: newFiles, pages: newPages } });
+      setFiles(prev => [...prev, ...newFiles]);
+      setPages(prev => [...prev, ...newPages]);
+      
+      toast({ title: t.messages.success, description: `${pdfFiles.length} ${t.messages.fileLoaded}` });
     } catch (error) {
-      console.error('PDF Yükleme Hatası:', error);
-      toast({
-        title: 'Hata',
-        description: 'PDF yüklenirken hata oluştu.',
-        variant: 'destructive',
-      });
+      console.error(t.messages.pdfLoadError, error);
+      toast({ title: t.messages.error, description: `PDF ${t.messages.loadError}`, variant: 'destructive' });
     } finally {
       setProcessing(false);
       setProgress(0);
     }
-  }, [files.length, toast]);
+  }, [files.length, addToHistory, toast]);
 
   const handleClear = useCallback(() => {
     setFiles([]);
     setPages([]);
     setSelectedPage(null);
+    setSelectedFile(null);
+    setHistory([]);
   }, []);
 
   const removePage = useCallback((index: number) => {
+    const pageToRemove = pages[index];
+    if (!pageToRemove) return;
+    
+    addToHistory({ type: 'REMOVE_PAGE', data: { index, page: pageToRemove } });
     setPages(prev => prev.filter((_, i) => i !== index));
-    if (selectedPage === index) {
-      setSelectedPage(prev => (prev && prev > 0 ? prev - 1 : null));
-    } else if (selectedPage !== null && selectedPage > index) {
-      setSelectedPage(prev => (prev !== null ? prev - 1 : null));
+    setIsPageModalOpen(false);
+  }, [pages, addToHistory]);
+
+  const removeFile = useCallback((fileIndex: number) => {
+    const fileToRemove = files[fileIndex];
+    const pagesToRemove = pages.filter(p => p.pdfIndex === fileIndex);
+    
+    addToHistory({ 
+      type: 'REMOVE_FILE', 
+      data: { index: fileIndex, file: fileToRemove, pages: pagesToRemove } 
+    });
+    
+    setFiles(prev => prev.filter((_, i) => i !== fileIndex));
+    setPages(prev => {
+      const filtered = prev.filter(p => p.pdfIndex !== fileIndex);
+      return filtered.map(p => ({
+        ...p,
+        pdfIndex: p.pdfIndex > fileIndex ? p.pdfIndex - 1 : p.pdfIndex
+      }));
+    });
+
+    if (selectedFile === fileIndex) {
+      setSelectedFile(null);
+      setIsFileModalOpen(false);
+    } else if (selectedFile !== null && selectedFile > fileIndex) {
+      setSelectedFile(selectedFile - 1);
     }
-  }, [selectedPage]);
+  }, [files, pages, selectedFile, addToHistory]);
 
   const movePage = useCallback((oldIndex: number, newIndex: number) => {
-    setPages(prev => arrayMove(prev, oldIndex, newIndex));
+    if (oldIndex === newIndex) return;
     
-    if (selectedPage === oldIndex) {
-      setSelectedPage(newIndex);
-    } else if (selectedPage !== null) {
-      if (oldIndex < newIndex && selectedPage > oldIndex && selectedPage <= newIndex) {
-        setSelectedPage(selectedPage - 1);
-      } else if (oldIndex > newIndex && selectedPage < oldIndex && selectedPage >= newIndex) {
-        setSelectedPage(selectedPage + 1);
-      }
-    }
-  }, [selectedPage]);
+    addToHistory({ type: 'REORDER_PAGES', data: { oldPages: [...pages] } });
+    setPages(prev => arrayMove(prev, oldIndex, newIndex));
+  }, [pages, addToHistory]);
+
+  const moveFile = useCallback((oldIndex: number, newIndex: number) => {
+    if (oldIndex === newIndex) return;
+    
+    addToHistory({ type: 'REORDER_FILES', data: { oldOrder: [...files], oldPages: [...pages] } });
+    
+    setFiles(prev => {
+      const newFiles = arrayMove(prev, oldIndex, newIndex);
+      
+      setPages(currentPages => {
+        const updatedPages = currentPages.map(page => {
+          const oldPdfIndex = page.pdfIndex;
+          let newPdfIndex: number;
+          if (oldPdfIndex === oldIndex) newPdfIndex = newIndex;
+          else if (oldIndex < newIndex && oldPdfIndex > oldIndex && oldPdfIndex <= newIndex) newPdfIndex = oldPdfIndex - 1;
+          else if (oldIndex > newIndex && oldPdfIndex < oldIndex && oldPdfIndex >= newIndex) newPdfIndex = oldPdfIndex + 1;
+          else newPdfIndex = oldPdfIndex;
+          return { ...page, pdfIndex: newPdfIndex };
+        });
+        return updatedPages.sort((a, b) => {
+          if (a.pdfIndex !== b.pdfIndex) return a.pdfIndex - b.pdfIndex;
+          return a.pageNumber - b.pageNumber;
+        });
+      });
+      return newFiles;
+    });
+  }, [files, pages, addToHistory]);
+
+  const rotateFile = useCallback((fileIndex: number) => {
+    const oldRotations = new Map<string, number>();
+    pages.filter(p => p.pdfIndex === fileIndex).forEach(p => oldRotations.set(p.id, p.rotation));
+    
+    addToHistory({ type: 'ROTATE_FILE', data: { fileIndex, oldRotations } });
+    
+    setPages(prev => prev.map(page => {
+      if (page.pdfIndex !== fileIndex) return page;
+      return { ...page, rotation: ((page.rotation + 90) % 360) as 0 | 90 | 180 | 270 };
+    }));
+    
+    toast({ title: t.pdfEdit.fileRotated, description: t.pdfEdit.fileRotated });
+  }, [pages, addToHistory, toast]);
+
+  const rotatePage = useCallback((index: number) => {
+    if (index < 0 || index >= pages.length) return;
+    
+    addToHistory({ type: 'ROTATE_PAGE', data: { index, oldRotation: pages[index].rotation } });
+    
+    setPages(prev => {
+      const newPages = [...prev];
+      newPages[index] = { 
+        ...newPages[index], 
+        rotation: ((newPages[index].rotation + 90) % 360) as 0 | 90 | 180 | 270 
+      };
+      return newPages;
+    });
+  }, [pages, addToHistory]);
+
+  const rotateAllPages = useCallback(() => {
+    addToHistory({ type: 'ROTATE_ALL_PAGES', data: { oldRotations: pages.map(p => p.rotation) } });
+    setPages(prev => prev.map(page => ({
+      ...page,
+      rotation: ((page.rotation + 90) % 360) as 0 | 90 | 180 | 270
+    })));
+  }, [pages, addToHistory]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -334,39 +794,36 @@ export const PDFEdit = () => {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    if (!over) {
+      setActiveId(null);
+      return;
+    }
 
-    if (over && active.id !== over.id) {
-      const oldIndex = pages.findIndex(p => p.id === active.id);
-      const newIndex = pages.findIndex(p => p.id === over.id);
-      
-      movePage(oldIndex, newIndex);
+    if (viewMode === 'pages') {
+      if (active.id !== over.id) {
+        const oldIndex = pages.findIndex((p: PDFPage) => p.id === active.id);
+        const newIndex = pages.findIndex((p: PDFPage) => p.id === over.id);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          movePage(oldIndex, newIndex);
+        }
+      }
+    } else {
+      const activeIdStr = active.id as string;
+      const overIdStr = over.id as string;
+      if (activeIdStr !== overIdStr) {
+        const oldIndex = files.findIndex((f: PDFFile) => `file-${f.id}` === activeIdStr);
+        const newIndex = files.findIndex((f: PDFFile) => `file-${f.id}` === overIdStr);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          moveFile(oldIndex, newIndex);
+        }
+      }
     }
     setActiveId(null);
   };
 
-  const rotatePage = useCallback((index: number) => {
-    setPages(prev => {
-      return prev.map((page, i) => {
-        if (i !== index) return page;
-        const currentRotation = page.rotation;
-        const nextRotation = ((currentRotation + 90) % 360) as 0 | 90 | 180 | 270;
-        return { ...page, rotation: nextRotation };
-      });
-    });
-  }, []);
-
-  const rotateAllPages = useCallback(() => {
-    setPages(prev => 
-      prev.map(page => ({
-        ...page,
-        rotation: ((page.rotation + 90) % 360) as 0 | 90 | 180 | 270
-      }))
-    );
-  }, []);
-
   const handleExport = useCallback(async () => {
     if (pages.length === 0) {
-      toast({ title: 'Hata', description: 'En az bir sayfa olmalı.', variant: 'destructive' });
+      toast({ title: t.messages.error, description: t.messages.minPageError, variant: 'destructive' });
       return;
     }
 
@@ -385,9 +842,7 @@ export const PDFEdit = () => {
         
         const [copiedPage] = await newPdf.copyPages(sourcePdf, [page.pageNumber - 1]);
         
-        if (page.rotation !== 0) {
-          copiedPage.setRotation(degrees(page.rotation));
-        }
+        if (page.rotation !== 0) copiedPage.setRotation(degrees(page.rotation));
         
         newPdf.addPage(copiedPage);
         setProgress(Math.round(((i + 1) / pages.length) * 100));
@@ -405,290 +860,503 @@ export const PDFEdit = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast({ title: 'Başarılı', description: 'PDF başarıyla dışa aktarıldı.' });
+      toast({ title: t.messages.success, description: `PDF ${t.messages.fileExported}` });
     } catch (error) {
-      console.error('Export Hatası:', error);
-      toast({ title: 'Hata', description: 'PDF dışa aktarılırken hata oluştu.', variant: 'destructive' });
+      console.error(t.messages.exportPdfError, error);
+      toast({ title: t.messages.error, description: `PDF ${t.messages.exportError}`, variant: 'destructive' });
     } finally {
       setProcessing(false);
       setProgress(0);
     }
   }, [pages, files, toast]);
 
-  useEffect(() => {
-    if (selectedPage === null || !canvasRef.current || pages.length === 0) return;
-    
-    const renderSelectedPage = async () => {
-      try {
-        const page = pages[selectedPage];
-        if (!page) return;
-        
-        const pdfFile = files[page.pdfIndex];
-        if (!pdfFile) return;
-        
-        const pdfPage = await pdfFile.pdf.getPage(page.pageNumber);
-        const viewport = pdfPage.getViewport({ scale: 1 });
-        
-        const canvas = canvasRef.current!;
-        const context = canvas.getContext('2d')!;
-        
-        if (page.rotation === 90 || page.rotation === 270) {
-          canvas.width = viewport.height;
-          canvas.height = viewport.width;
-        } else {
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-        }
-        
-        context.save();
-        
-        if (page.rotation !== 0) {
-          context.translate(canvas.width / 2, canvas.height / 2);
-          context.rotate((page.rotation * Math.PI) / 180);
-          context.translate(-viewport.width / 2, -viewport.height / 2);
-        }
-        
-        context.fillStyle = 'white';
-        context.fillRect(0, 0, viewport.width, viewport.height);
-        
-        await pdfPage.render({ canvasContext: context, viewport }).promise;
-        context.restore();
-      } catch (error) {
-        console.error('Sayfa render hatası:', error);
-      }
-    };
-    
-    renderSelectedPage();
-  }, [selectedPage, pages, files]);
+  const getFileThumbnail = (fileIndex: number) => {
+    return pages.find(p => p.pdfIndex === fileIndex && p.pageNumber === 1)?.thumbnail;
+  };
 
-  const activePage = activeId ? pages.find(p => p.id === activeId) : null;
+  const openPageModal = (index: number) => {
+    setModalPageIndex(index);
+    setIsPageModalOpen(true);
+  };
+
+  const openFileModal = (index: number) => {
+    setSelectedFile(index);
+    setIsFileModalOpen(true);
+  };
+
+  const getActiveItem = () => {
+    if (!activeId) return null;
+    
+    if (viewMode === 'pages') {
+      const page = pages.find(p => p.id === activeId);
+      return page ? (
+        <div className="flex flex-col gap-2 p-3 rounded-xl border-2 border-primary bg-white shadow-2xl rotate-3 scale-105 opacity-90 cursor-grabbing">
+          <div className="aspect-[210/297] w-32 sm:w-40 overflow-hidden rounded-lg bg-gray-100">
+            <img src={page.thumbnail} className="w-full h-full object-contain" style={{ imageRendering: 'crisp-edges' }} alt="" />
+          </div>
+        </div>
+      ) : null;
+    } else {
+      const file = files.find(f => `file-${f.id}` === activeId);
+      if (!file) return null;
+      const thumb = getFileThumbnail(files.indexOf(file));
+      return (
+        <div className="flex flex-col gap-2 p-4 rounded-xl border-2 border-primary bg-white shadow-2xl rotate-3 scale-105 opacity-90 cursor-grabbing w-48 sm:w-64">
+          <div className="flex items-center gap-2">
+            <File className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            <span className="font-semibold truncate text-xs sm:text-sm">{file.file.name}</span>
+          </div>
+          {thumb && <img src={thumb} className="w-full object-contain" style={{ imageRendering: 'crisp-edges' }} alt="" />}
+        </div>
+      );
+    }
+  };
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl min-h-[calc(100vh-4rem)] flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
-            <div className="p-2 bg-red-500 rounded-lg shadow-lg">
-              <FileEdit className="w-6 h-6 text-white" />
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 max-w-7xl h-[calc(100vh-4rem)] flex flex-col gap-4 sm:gap-6 overflow-hidden">
+      {/* {t.comments.headerRedesigned} */}
+      <div className="flex items-center justify-between gap-3 sm:gap-4 shrink-0">
+        {/* {t.comments.leftGroup} */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="p-1.5 sm:p-2 bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg shrink-0">
+              <FileEdit className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
             </div>
-            PDF Düzenle
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Sayfaları sürükleyip bırakarak yeniden sıralayın, döndürün ve düzenleyin.
-          </p>
-        </div>
-        
-        {pages.length > 0 && (
-          <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold truncate">
+                {t.pdfEdit.title}
+              </h1>
+              <p className="text-muted-foreground text-[10px] sm:text-sm hidden lg:block">
+                {t.ui.pagesText}
+              </p>
+            </div>
+          </div>
+          
+          {/* Geri Al - Sadece sayfa varken göster */}
+          {pages.length > 0 && (
             <Button 
               variant="outline" 
-              onClick={() => document.getElementById('add-pdf')?.click()}
-              className="gap-2"
+              size="sm"
+              onClick={undo} 
+              disabled={history.length === 0}
+              className="h-9 sm:h-10 px-2.5 sm:px-3 shrink-0 gap-1.5 sm:gap-2 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" />
-              PDF Ekle
+              <Undo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline text-xs sm:text-sm font-medium">{t.ui.undo}</span>
+              {history.length > 0 && (
+                <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {history.length}
+                </span>
+              )}
             </Button>
-            <input
-              id="add-pdf"
-              type="file"
-              accept=".pdf"
-              multiple
-              className="hidden"
-              onChange={(e) => e.target.files && handleFilesDrop(e.target.files)}
-            />
+          )}
+        </div>
+        
+        {/* {t.comments.rightGroup} */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button 
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById('add-pdf')?.click()}
+            className="h-9 sm:h-10 px-2.5 sm:px-4 gap-1.5 sm:gap-2 hover:bg-green-50 hover:border-green-200 hover:text-green-700 font-medium"
+          >
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline text-xs sm:text-sm">{t.pdfEdit.addPdf}</span>
+          </Button>
+          
+          <input 
+            id="add-pdf" 
+            type="file" 
+            accept=".pdf" 
+            multiple 
+            className="hidden" 
+            onChange={(e) => e.target.files && handleFilesDrop(e.target.files)} 
+          />
+          
+          {pages.length > 0 && (
             <Button 
               onClick={handleExport} 
               disabled={processing}
-              className="gap-2"
+              size="sm"
+              className="h-9 sm:h-10 px-3 sm:px-4 gap-1.5 sm:gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md font-medium"
             >
-              <Download className="w-4 h-4" />
-              {processing ? 'İşleniyor...' : 'İndir'}
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline text-xs sm:text-sm">{t.pdfEdit.download}</span>
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {pages.length === 0 ? (
-        <div className="flex-1 flex flex-col justify-center">
-          <FileDropzone
-            onFilesDrop={handleFilesDrop}
-            onClear={handleClear}
-            accept=".pdf"
-            multiple={true}
-            selectedFiles={[]}
-          />
-          {processing && (
-            <div className="mt-4">
-              <ProgressBar progress={progress} label="PDF yükleniyor..." />
-            </div>
-          )}
+        <div className="flex-1 flex flex-col justify-center overflow-hidden">
+          <FileDropzone onFilesDrop={handleFilesDrop} onClear={handleClear} accept=".pdf" multiple={true} selectedFiles={[]} />
+          {processing && <ProgressBar progress={progress} label={t.ui.pdfLoading} />}
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-6 flex-1">
-          {/* Sol Panel: Grid Görünümü */}
-          <Card className="flex-1 lg:flex-[2] overflow-hidden flex flex-col shadow-lg">
-            <CardContent className="p-4 flex flex-col h-full">
-              {/* Toolbar */}
-              <div className="flex items-center justify-between mb-4 pb-4 border-b">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {pages.length} Sayfa
-                  </span>
-                  <div className="h-4 w-px bg-border mx-2" />
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={rotateAllPages}
-                    className="gap-2 text-xs"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                    Tümünü Döndür
-                  </Button>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleClear}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 gap-2 text-xs"
+        <div className="flex flex-col flex-1 gap-3 sm:gap-4 min-h-0">
+          {/* {t.comments.toolbarRedesigned} */}
+          <div className="flex items-center justify-between gap-2 sm:gap-3 shrink-0 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-2.5 sm:p-3 rounded-xl border shadow-sm">
+            {/* {t.comments.leftGroupModeSelector} */}
+            <div className="flex items-center gap-2 flex-wrap flex-1">
+              {/* {t.comments.segmentedControl} */}
+              <div className="flex items-center bg-white dark:bg-gray-950 rounded-lg p-1 border-2 border-gray-200 dark:border-gray-700 shadow-sm">
+                <button
+                  onClick={() => setViewMode('files')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all duration-200',
+                    viewMode === 'files' 
+                      ? 'bg-gradient-to-r from-primary to-primary/90 text-white shadow-md scale-105' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
+                  )}
                 >
-                  <X className="w-3.5 h-3.5" />
-                  Temizle
+                  <Grid3X3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>{t.pdfEdit.viewMode.files}</span>
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
+                    viewMode === 'files' 
+                      ? "bg-white/20 text-white" 
+                      : "bg-primary/10 text-primary"
+                  )}>
+                    {files.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setViewMode('pages')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all duration-200',
+                    viewMode === 'pages' 
+                      ? 'bg-gradient-to-r from-primary to-primary/90 text-white shadow-md scale-105' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-gray-800'
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>{t.ui.pages}</span>
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
+                    viewMode === 'pages' 
+                      ? "bg-white/20 text-white" 
+                      : "bg-primary/10 text-primary"
+                  )}>
+                    {pages.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* {t.comments.sortingDropdown} */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="h-9 sm:h-10 px-2.5 sm:px-3 gap-1.5 sm:gap-2 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-700 font-medium"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline text-xs sm:text-sm">{t.pdfEdit.sort}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {viewMode === 'files' ? (
+                    <>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-sm">
+                          <Type className="w-4 h-4 mr-2" />
+                          <span>{t.pdfEdit.sortByName}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => sortFilesByName('asc')} className="text-sm">
+                            <SortAsc className="w-4 h-4 mr-2" />{t.pdfEdit.ascendingOrder}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sortFilesByName('desc')} className="text-sm">
+                            <SortDesc className="w-4 h-4 mr-2" />{t.pdfEdit.descendingOrder}
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-sm">
+                          <FileDigit className="w-4 h-4 mr-2" />
+                          <span>{t.pdfEdit.pageCount}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => sortFilesByPageCount('asc')} className="text-sm">
+                            <ArrowUp className="w-4 h-4 mr-2" />{t.pdfEdit.fewToMany}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sortFilesByPageCount('desc')} className="text-sm">
+                            <ArrowDown className="w-4 h-4 mr-2" />{t.pdfEdit.manyToFew}
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-sm">
+                          <File className="w-4 h-4 mr-2" />
+                          <span>{t.pdfEdit.fileSize}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => sortFilesBySize('asc')} className="text-sm">
+                            <ArrowUp className="w-4 h-4 mr-2" />{t.pdfEdit.smallToLarge}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sortFilesBySize('desc')} className="text-sm">
+                            <ArrowDown className="w-4 h-4 mr-2" />{t.pdfEdit.largeToSmall}
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-sm">
+                          <FileDigit className="w-4 h-4 mr-2" />
+                          <span>{t.pdfEdit.pageNumber}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => sortPagesByNumber('asc')} className="text-sm">
+                            <SortAsc className="w-4 h-4 mr-2" />{t.pdfEdit.numericAscending}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sortPagesByNumber('desc')} className="text-sm">
+                            <SortDesc className="w-4 h-4 mr-2" />{t.pdfEdit.numericDescending}
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="text-sm">
+                          <Type className="w-4 h-4 mr-2" />
+                          <span>{t.pdfEdit.fileName}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => sortPagesByFileName('asc')} className="text-sm">
+                            <SortAsc className="w-4 h-4 mr-2" />{t.pdfEdit.ascendingOrder}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => sortPagesByFileName('desc')} className="text-sm">
+                            <SortDesc className="w-4 h-4 mr-2" />{t.pdfEdit.descendingOrder}
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Tümünü Döndür - Sadece sayfa modunda */}
+              {viewMode === 'pages' && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={rotateAllPages}
+                  className="h-9 sm:h-10 px-2.5 sm:px-3 gap-1.5 sm:gap-2 hover:bg-orange-50 hover:border-orange-200 hover:text-orange-700 font-medium"
+                >
+                  <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden lg:inline text-xs sm:text-sm">{t.pdfEdit.rotateAll}</span>
+                </Button>
+              )}
+
+              {/* {t.comments.clearButton} */}
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleClear}
+                className="h-9 sm:h-10 px-2.5 sm:px-3 gap-1.5 sm:gap-2 text-red-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700 border-red-200 font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                {viewMode === 'files' && <span className="text-xs sm:text-sm">{t.pdfEdit.clear}</span>}
+              </Button>
+            </div>
+          </div>
+
+          {/* Grid Container */}
+          <div 
+            ref={gridRef}
+            className="flex-1 overflow-y-auto min-h-0 bg-white dark:bg-gray-950 rounded-xl border-2 border-gray-200 dark:border-gray-800 p-2 sm:p-4 touch-pan-y shadow-sm"
+          >
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+              {viewMode === 'pages' ? (
+                <SortableContext items={pages.map(p => p.id)} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-9 gap-1.5 sm:gap-2">
+                    {pages.map((page, index) => (
+                      <SortablePageItem key={page.id} page={page} index={index} selected={false} onSelect={openPageModal} onRemove={removePage} t={t} />
+                    ))}
+                  </div>
+                </SortableContext>
+              ) : (
+                <SortableContext items={files.map(f => `file-${f.id}`)} strategy={rectSortingStrategy}>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
+                    {files.map((file, index) => (
+                      <SortableFileItem key={file.id} file={file} fileIndex={index} thumbnail={getFileThumbnail(index)} selected={false} onSelect={openFileModal} onRemove={removeFile} pageCount={file.pageCount} t={t} />
+                    ))}
+                  </div>
+                </SortableContext>
+              )}
+
+              <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
+                {getActiveItem()}
+              </DragOverlay>
+            </DndContext>
+          </div>
+
+          {processing && <ProgressBar progress={progress} label={t.pdfEdit.creating} />}
+        </div>
+      )}
+
+      {/* {t.comments.pageModalDesign} */}
+      <Dialog open={isPageModalOpen} onOpenChange={setIsPageModalOpen}>
+        <DialogContent className="max-w-[95vw] sm:max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="text-base sm:text-lg flex items-center justify-between font-semibold">
+              <span>{t.pdfEdit.page} {modalPageIndex !== null ? modalPageIndex + 1 : ''} {t.pdfEdit.of} {pages.length}</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {modalPageIndex !== null && pages[modalPageIndex] && (
+            <div className="flex flex-col gap-4 overflow-hidden flex-1">
+              {/* {t.comments.controlButtonsLarge} */}
+              <div className="flex items-center justify-center gap-2 sm:gap-3 shrink-0">
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => { if (modalPageIndex > 0) setModalPageIndex(modalPageIndex - 1); }} 
+                  disabled={modalPageIndex === 0}
+                  className="h-11 w-11 sm:h-12 sm:w-12 p-0 hover:bg-blue-50 hover:border-blue-200 disabled:opacity-40"
+                >
+                  <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => rotatePage(modalPageIndex)}
+                  className="h-11 w-11 sm:h-12 sm:w-12 p-0 hover:bg-orange-50 hover:border-orange-200"
+                >
+                  <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => removePage(modalPageIndex)}
+                  className="h-11 w-11 sm:h-12 sm:w-12 p-0 text-red-600 hover:bg-red-50 hover:border-red-300 border-red-200"
+                >
+                  <Trash2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  size="lg"
+                  onClick={() => { if (modalPageIndex < pages.length - 1) setModalPageIndex(modalPageIndex + 1); }} 
+                  disabled={modalPageIndex === pages.length - 1}
+                  className="h-11 w-11 sm:h-12 sm:w-12 p-0 hover:bg-blue-50 hover:border-blue-200 disabled:opacity-40"
+                >
+                  <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
                 </Button>
               </div>
 
-              {/* Drag & Drop Grid Container */}
-              <div className="flex-1 overflow-y-auto pr-2 -mr-2">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext 
-                    items={pages.map(p => p.id)} 
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {pages.map((page, index) => (
-                        <SortablePageItem
-                          key={page.id}
-                          page={page}
-                          index={index}
-                          selected={selectedPage === index}
-                          onSelect={setSelectedPage}
-                          onRotate={rotatePage}
-                          onRemove={removePage}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-
-                  <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
-                    {activePage ? (
-                      <div className="flex flex-col gap-2 p-3 rounded-xl border-2 border-primary bg-white dark:bg-gray-900 shadow-2xl rotate-3 scale-105 opacity-90 cursor-grabbing">
-                        <div className="aspect-[210/297] w-full overflow-hidden rounded-lg bg-gray-100">
-                          <img
-                            src={activePage.thumbnail}
-                            alt="Sürüklenen sayfa"
-                            className="w-full h-full object-contain"
-                            style={{ transform: `rotate(${activePage.rotation}deg)` }}
-                          />
-                        </div>
-                        <div className="text-center text-xs font-bold text-primary">
-                          Taşınıyor...
-                        </div>
-                      </div>
-                    ) : null}
-                  </DragOverlay>
-                </DndContext>
+              <div className="flex-1 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-xl overflow-auto flex items-center justify-center min-h-0 p-3 sm:p-6 border-2">
+                <img 
+                  src={pages[modalPageIndex].thumbnail} 
+                  alt={`${t.pdfEdit.altPage} ${modalPageIndex + 1}`} 
+                  className="max-w-full max-h-full object-contain shadow-2xl rounded-lg bg-white border" 
+                  style={{ 
+                    transform: `rotate(${pages[modalPageIndex].rotation}deg)`,
+                    imageRendering: 'crisp-edges'
+                  }} 
+                />
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-              {processing && (
-                <div className="mt-4">
-                  <ProgressBar progress={progress} label="PDF oluşturuluyor..." />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Sağ Panel: Önizleme */}
-          <Card className="lg:w-[400px] xl:w-[450px] flex flex-col shadow-lg">
-            <CardContent className="p-4 flex flex-col h-full">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Sayfa Önizleme
-              </h3>
+      {/* {t.comments.fileModalDesign} */}
+      <Dialog open={isFileModalOpen} onOpenChange={setIsFileModalOpen}>
+        <DialogContent className="max-w-[95vw] sm:max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+          {selectedFile !== null && files[selectedFile] && (
+            <>
+              <DialogHeader className="shrink-0">
+                <DialogTitle className="text-base sm:text-lg flex items-center gap-2 font-semibold">
+                  <File className="w-5 h-5 shrink-0 text-primary" />
+                  <span className="truncate max-w-[250px] sm:max-w-md">{files[selectedFile].file.name}</span>
+                  <span className="text-sm font-normal text-muted-foreground shrink-0">
+                    ({files[selectedFile].pageCount} {t.ui.pages})
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
               
-              {selectedPage !== null ? (
-                <div className="flex flex-col h-full gap-4">
-                  <div className="flex items-center justify-between bg-muted rounded-lg p-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setSelectedPage(Math.max(0, selectedPage - 1))}
-                      disabled={selectedPage === 0}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="text-sm font-medium">
-                      {selectedPage + 1} / {pages.length}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setSelectedPage(Math.min(pages.length - 1, selectedPage + 1))}
-                      disabled={selectedPage === pages.length - 1}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </div>
+              <div className="flex flex-col gap-4 overflow-hidden flex-1">
+                {/* {t.comments.controlButtons} */}
+                <div className="flex items-center justify-center gap-2 sm:gap-3 shrink-0 flex-wrap">
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => rotateFile(selectedFile)}
+                    className="h-10 px-3 sm:px-4 gap-2 hover:bg-orange-50 hover:border-orange-200 font-medium"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                    <span className="text-xs sm:text-sm">{t.pdfEdit.rotateAll}</span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { 
+                      setViewMode('pages'); 
+                      const firstPageIndex = pages.findIndex(p => p.pdfIndex === selectedFile); 
+                      if (firstPageIndex !== -1) setModalPageIndex(firstPageIndex); 
+                      setIsFileModalOpen(false); 
+                      setIsPageModalOpen(true); 
+                    }}
+                    className="h-10 px-3 sm:px-4 gap-2 hover:bg-blue-50 hover:border-blue-200 font-medium"
+                  >
+                    <Layers className="w-4 h-4" />
+                    <span className="text-xs sm:text-sm">{t.pdfEdit.pageView}</span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => removeFile(selectedFile)}
+                    className="h-10 px-3 sm:px-4 gap-2 text-red-600 hover:bg-red-50 hover:border-red-300 border-red-200 font-medium"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="text-xs sm:text-sm">{t.pdfEdit.deleteFile}</span>
+                  </Button>
+                </div>
 
-                  <div className="flex-1 bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center min-h-[400px] border border-gray-200 dark:border-gray-800">
-                    <canvas
-                      ref={canvasRef}
-                      className="max-w-full max-h-full shadow-lg bg-white rounded"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => rotatePage(selectedPage)}
-                      className="gap-2"
-                    >
-                      <RotateCw className="w-4 h-4" />
-                      90° Döndür
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removePage(selectedPage)}
-                      className="gap-2 text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Sayfayı Sil
-                    </Button>
+                <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 rounded-xl p-3 sm:p-4 border-2">
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 sm:gap-3">
+                    {pages.filter(p => p.pdfIndex === selectedFile).map((page) => {
+                      const globalIndex = pages.findIndex(p => p.id === page.id);
+                      return (
+                        <button 
+                          key={page.id} 
+                          onClick={() => { setIsFileModalOpen(false); setModalPageIndex(globalIndex); setIsPageModalOpen(true); }} 
+                          className="group relative flex flex-col gap-1.5 p-2 rounded-lg border-2 bg-white dark:bg-gray-800 hover:border-primary hover:shadow-md transition-all text-left"
+                        >
+                          <div className="absolute top-1 right-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                              #{globalIndex + 1}
+                            </span>
+                          </div>
+                          <div className="relative aspect-[210/297] w-full overflow-hidden rounded bg-gray-100">
+                            <img 
+                              src={page.thumbnail} 
+                              alt={`${t.pdfEdit.altPage} ${page.pageNumber}`} 
+                              className="w-full h-full object-contain" 
+                              style={{ 
+                                transform: `rotate(${page.rotation}deg)`,
+                                imageRendering: 'crisp-edges'
+                              }} 
+                            />
+                          </div>
+                          <p className="text-[10px] sm:text-xs text-center text-muted-foreground font-medium">
+                            {t.pdfEdit.page} {page.pageNumber}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
-                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <FileText className="w-8 h-8 opacity-50" />
-                  </div>
-                  <p className="font-medium">Görüntülemek için bir sayfa seçin</p>
-                  <p className="text-sm mt-2 opacity-70">
-                    Soldaki listeden bir sayfa seçerek detayları görüntüleyebilirsiniz
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

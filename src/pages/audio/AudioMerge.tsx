@@ -7,8 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useFFmpeg } from '@/hooks/useFFmpeg';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const AudioMerge: React.FC = () => {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<File[]>([]);
   const [merging, setMerging] = useState(false);
   const { loaded, loading, loadFFmpeg, mergeAudio, progress } = useFFmpeg();
@@ -18,8 +20,8 @@ export const AudioMerge: React.FC = () => {
     if (!loaded && !loading) {
       loadFFmpeg().catch(() => {
         toast({
-          title: 'Hata',
-          description: 'FFmpeg yüklenirken bir hata oluştu.',
+          title: t.messages.error,
+          description: t.messages.ffmpegError,
           variant: 'destructive',
         });
       });
@@ -36,8 +38,8 @@ export const AudioMerge: React.FC = () => {
 
     if (audioFiles.length === 0) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen ses dosyaları yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.audioFiles} ${t.messages.filesUpload}`,
         variant: 'destructive',
       });
       return;
@@ -69,8 +71,8 @@ export const AudioMerge: React.FC = () => {
   const handleMerge = async () => {
     if (files.length < 2) {
       toast({
-        title: 'Hata',
-        description: 'En az 2 ses dosyası seçmelisiniz.',
+        title: t.messages.error,
+        description: t.audioMerge.minFilesError,
         variant: 'destructive',
       });
       return;
@@ -83,13 +85,13 @@ export const AudioMerge: React.FC = () => {
       downloadBlob(blob, `birlesik.${ext}`);
       
       toast({
-        title: 'Başarılı',
-        description: 'Ses dosyaları başarıyla birleştirildi.',
+        title: t.messages.success,
+        description: t.audioMerge.filesMerged,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Ses birleştirme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.audioMerge.mergeError,
         variant: 'destructive',
       });
     } finally {
@@ -106,10 +108,10 @@ export const AudioMerge: React.FC = () => {
           <div className="p-2 bg-blue-500 rounded-lg">
             <Merge className="w-6 h-6 text-white" />
           </div>
-          Ses Birleştir
+          {t.audioMerge.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Birden fazla ses dosyasını tek bir dosyada birleştirin.
+          {t.audioMerge.description}
         </p>
       </div>
 
@@ -118,7 +120,7 @@ export const AudioMerge: React.FC = () => {
           <CardContent className="p-4 flex items-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
             <p className="text-sm text-yellow-700 dark:text-yellow-400">
-              Ses işleme kütüphanesi yükleniyor... Lütfen bekleyin.
+              {t.audioMerge.loadingLibrary}
             </p>
           </CardContent>
         </Card>
@@ -136,9 +138,9 @@ export const AudioMerge: React.FC = () => {
         <Card className="mt-6">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Sıralama</h3>
+              <h3 className="font-semibold">{t.audioMerge.sorting}</h3>
               <span className="text-sm text-muted-foreground">
-                {files.length} dosya
+                {t.audioMerge.filesCount.replace('{count}', files.length.toString())}
               </span>
             </div>
 
@@ -194,7 +196,7 @@ export const AudioMerge: React.FC = () => {
               <div className="mb-6">
                 <ProgressBar 
                   progress={loading ? 0 : progress} 
-                  label={loading ? 'Yükleniyor...' : 'Birleştiriliyor...'} 
+                  label={loading ? t.audioMerge.loading : t.audioMerge.merging} 
                 />
               </div>
             )}
@@ -206,11 +208,11 @@ export const AudioMerge: React.FC = () => {
               size="lg"
             >
               {isProcessing ? (
-                'İşleniyor...'
+                t.audioMerge.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Ses Birleştir ve İndir
+                  {t.audioMerge.mergeAndDownload}
                 </>
               )}
             </Button>

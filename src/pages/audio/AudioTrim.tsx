@@ -9,8 +9,10 @@ import { Slider } from '@/components/ui/slider';
 import { useFFmpeg } from '@/hooks/useFFmpeg';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const AudioTrim: React.FC = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
@@ -27,8 +29,8 @@ export const AudioTrim: React.FC = () => {
     if (!loaded && !loading) {
       loadFFmpeg().catch(() => {
         toast({
-          title: 'Hata',
-          description: 'FFmpeg yüklenirken bir hata oluştu.',
+          title: t.messages.error,
+          description: t.messages.ffmpegError,
           variant: 'destructive',
         });
       });
@@ -45,8 +47,8 @@ export const AudioTrim: React.FC = () => {
 
     if (!audioFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir ses dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.audioFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -105,13 +107,13 @@ export const AudioTrim: React.FC = () => {
       downloadBlob(blob, outputName);
       
       toast({
-        title: 'Başarılı',
-        description: 'Ses dosyası başarıyla kırpıldı.',
+        title: t.messages.success,
+        description: t.audioTrim.fileTrimmed,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Ses kırpma işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.audioTrim.trimError,
         variant: 'destructive',
       });
     } finally {
@@ -128,10 +130,10 @@ export const AudioTrim: React.FC = () => {
           <div className="p-2 bg-blue-500 rounded-lg">
             <Scissors className="w-6 h-6 text-white" />
           </div>
-          Ses Kırp
+          {t.audioTrim.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Ses dosyanızdan istediğiniz bölümü kesin.
+          {t.audioTrim.description}
         </p>
       </div>
 
@@ -140,7 +142,7 @@ export const AudioTrim: React.FC = () => {
           <CardContent className="p-4 flex items-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
             <p className="text-sm text-yellow-700 dark:text-yellow-400">
-              Ses işleme kütüphanesi yükleniyor... Lütfen bekleyin.
+              {t.audioTrim.loadingLibrary}
             </p>
           </CardContent>
         </Card>
@@ -176,7 +178,7 @@ export const AudioTrim: React.FC = () => {
 
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
-                <Label className="text-base font-medium">Başlangıç Zamanı</Label>
+                <Label className="text-base font-medium">{t.audioTrim.startTime}</Label>
                 <span className="text-sm font-mono bg-muted px-2 py-1 rounded">
                   {formatTime(startTime)}
                 </span>
@@ -194,7 +196,7 @@ export const AudioTrim: React.FC = () => {
 
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
-                <Label className="text-base font-medium">Bitiş Zamanı</Label>
+                <Label className="text-base font-medium">{t.audioTrim.endTime}</Label>
                 <span className="text-sm font-mono bg-muted px-2 py-1 rounded">
                   {formatTime(endTime)}
                 </span>
@@ -211,7 +213,7 @@ export const AudioTrim: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between mb-6 p-3 bg-muted rounded-lg">
-              <span className="text-sm text-muted-foreground">Seçilen Süre:</span>
+              <span className="text-sm text-muted-foreground">{t.audioTrim.selectedDuration}</span>
               <span className="font-medium">{formatTime(endTime - startTime)}</span>
             </div>
 
@@ -226,7 +228,7 @@ export const AudioTrim: React.FC = () => {
                 ) : (
                   <Play className="w-5 h-5 mr-2" />
                 )}
-                {isPlaying ? 'Durdur' : 'Önizle'}
+                {isPlaying ? t.audioTrim.stop : t.audioTrim.preview}
               </Button>
               <Button
                 onClick={handleTrim}
@@ -234,11 +236,11 @@ export const AudioTrim: React.FC = () => {
                 className="flex-1"
               >
                 {isProcessing ? (
-                  'İşleniyor...'
+                  t.audioTrim.processing
                 ) : (
                   <>
                     <Download className="w-5 h-5 mr-2" />
-                    Kırp ve İndir
+                    {t.audioTrim.trimAndDownload}
                   </>
                 )}
               </Button>
@@ -248,7 +250,7 @@ export const AudioTrim: React.FC = () => {
               <div className="mt-4">
                 <ProgressBar 
                   progress={loading ? 0 : progress} 
-                  label={loading ? 'Yükleniyor...' : 'Kırpılıyor...'} 
+                  label={loading ? t.audioTrim.loading : t.audioTrim.trimming} 
                 />
               </div>
             )}

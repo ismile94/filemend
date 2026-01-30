@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useImage } from '@/hooks/useImage';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const ImageResize = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [originalDimensions, setOriginalDimensions] = useState({ width: 0, height: 0 });
@@ -30,8 +32,8 @@ export const ImageResize = () => {
 
     if (!imageFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir görüntü dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.imageFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -93,13 +95,13 @@ export const ImageResize = () => {
       URL.revokeObjectURL(url);
       
       toast({
-        title: 'Başarılı',
-        description: 'Görüntü başarıyla boyutlandırıldı.',
+        title: t.messages.success,
+        description: t.imageResize.imageResized,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Görüntü boyutlandırma işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.imageResize.resizeError,
         variant: 'destructive',
       });
     }
@@ -112,10 +114,10 @@ export const ImageResize = () => {
           <div className="p-2 bg-green-500 rounded-lg">
             <ImageIcon className="w-6 h-6 text-white" />
           </div>
-          Görüntü Boyutlandır
+          {t.imageResize.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Görüntü dosyalarınızın boyutunu değiştirin.
+          {t.imageResize.description}
         </p>
       </div>
 
@@ -132,9 +134,9 @@ export const ImageResize = () => {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div>
-                <Label className="mb-2 block">Orijinal Boyut</Label>
+                <Label className="mb-2 block">{t.imageResize.originalSize}</Label>
                 <p className="text-sm text-muted-foreground">
-                  {originalDimensions.width} x {originalDimensions.height} piksel
+                  {originalDimensions.width} x {originalDimensions.height} {t.imageResize.pixels}
                 </p>
               </div>
               {preview && (
@@ -155,7 +157,7 @@ export const ImageResize = () => {
                 ) : (
                   <Unlock className="w-4 h-4" />
                 )}
-                <span className="text-sm font-medium">En-Boy Oranını Koru</span>
+                <span className="text-sm font-medium">{t.imageResize.maintainAspectRatio}</span>
               </div>
               <Switch
                 checked={maintainAspectRatio}
@@ -166,7 +168,7 @@ export const ImageResize = () => {
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <Label htmlFor="width" className="mb-2 block">
-                  Genişlik (px)
+                  {t.imageResize.width} ({t.imageResize.pixels})
                 </Label>
                 <Input
                   id="width"
@@ -178,7 +180,7 @@ export const ImageResize = () => {
               </div>
               <div>
                 <Label htmlFor="height" className="mb-2 block">
-                  Yükseklik (px)
+                  {t.imageResize.height} ({t.imageResize.pixels})
                 </Label>
                 <Input
                   id="height"
@@ -192,7 +194,7 @@ export const ImageResize = () => {
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Boyutlandırılıyor..." />
+                <ProgressBar progress={progress} label={t.imageResize.resizing} />
               </div>
             )}
 
@@ -203,11 +205,11 @@ export const ImageResize = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.imageResize.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Boyutlandır ve İndir
+                  {t.imageResize.resizeAndDownload}
                 </>
               )}
             </Button>

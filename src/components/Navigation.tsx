@@ -21,6 +21,8 @@ import {
   SheetContent,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { useTranslation } from '@/contexts/LanguageContext';
+import type { Language } from '@/locales';
 
 interface NavItem {
   title: string;
@@ -29,45 +31,51 @@ interface NavItem {
   children?: { title: string; path: string }[];
 }
 
-const navItems: NavItem[] = [
-  { title: 'Ana Sayfa', path: '/', icon: Home },
-  {
-    title: 'PDF Araçları',
-    path: '/pdf',
-    icon: FileText,
-    children: [
-      { title: 'PDF Düzenle', path: '/pdf/edit' },
-      { title: 'PDF Böl', path: '/pdf/split' },
-      { title: 'PDF Sıkıştır', path: '/pdf/compress' },
-      { title: 'PDF Döndür', path: '/pdf/rotate' },
-    ],
-  },
-  {
-    title: 'Ses Araçları',
-    path: '/audio',
-    icon: Music,
-    children: [
-      { title: 'Ses Dönüştür', path: '/audio/convert' },
-      { title: 'Ses Kırp', path: '/audio/trim' },
-      { title: 'Ses Birleştir', path: '/audio/merge' },
-    ],
-  },
-  {
-    title: 'Görüntü Araçları',
-    path: '/image',
-    icon: Image,
-    children: [
-      { title: 'Görüntü Sıkıştır', path: '/image/compress' },
-      { title: 'Görüntü Dönüştür', path: '/image/convert' },
-      { title: 'Görüntü Boyutlandır', path: '/image/resize' },
-      { title: 'Görüntü Döndür', path: '/image/rotate' },
-    ],
-  },
-];
 
 export const Navigation = () => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { t, language, setLanguage } = useTranslation();
+
+  const navItems: NavItem[] = [
+    { title: t.nav.home, path: '/', icon: Home },
+    {
+      title: t.nav.pdfTools,
+      path: '/pdf',
+      icon: FileText,
+      children: [
+        { title: t.nav.pdfEdit, path: '/pdf/edit' },
+        { title: t.nav.pdfSplit, path: '/pdf/split' },
+        { title: t.nav.pdfCompress, path: '/pdf/compress' },
+        { title: t.nav.pdfRotate, path: '/pdf/rotate' },
+      ],
+    },
+    {
+      title: t.nav.audioTools,
+      path: '/audio',
+      icon: Music,
+      children: [
+        { title: t.nav.audioConvert, path: '/audio/convert' },
+        { title: t.nav.audioTrim, path: '/audio/trim' },
+        { title: t.nav.audioMerge, path: '/audio/merge' },
+      ],
+    },
+    {
+      title: t.nav.imageTools,
+      path: '/image',
+      icon: Image,
+      children: [
+        { title: t.nav.imageCompress, path: '/image/compress' },
+        { title: t.nav.imageConvert, path: '/image/convert' },
+        { title: t.nav.imageResize, path: '/image/resize' },
+        { title: t.nav.imageRotate, path: '/image/rotate' },
+      ],
+    },
+  ];
+
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+  };
 
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(path + '/');
@@ -81,7 +89,7 @@ export const Navigation = () => {
           <div className="p-2 bg-primary rounded-lg">
             <FileText className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold hidden sm:inline">FileTools</span>
+          <span className="text-xl font-bold hidden sm:inline">{t.siteName}</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -133,7 +141,54 @@ export const Navigation = () => {
           ))}
         </nav>
 
-        {/* Mobile Navigation */}
+        {/* Language Selector & Mobile Menu */}
+        <div className="flex items-center gap-2">
+          {/* Desktop Language Selector */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild className="hidden sm:flex">
+              <Button variant="ghost" size="sm" className="gap-2">
+                <span className="text-sm font-medium">{t.language.flags[language]}</span>
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem 
+                onClick={() => handleLanguageChange('tr')}
+                className={cn(
+                  "cursor-pointer flex items-center gap-2",
+                  language === 'tr' && "bg-accent text-accent-foreground font-medium"
+                )}
+              >
+                <span className="text-lg">{t.language.flags.tr}</span>
+                {t.language.turkish}
+                {language === 'tr' && <span className="ml-auto text-xs">✓</span>}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleLanguageChange('en')}
+                className={cn(
+                  "cursor-pointer flex items-center gap-2",
+                  language === 'en' && "bg-accent text-accent-foreground font-medium"
+                )}
+              >
+                <span className="text-lg">{t.language.flags.en}</span>
+                {t.language.english}
+                {language === 'en' && <span className="ml-auto text-xs">✓</span>}
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleLanguageChange('pt')}
+                className={cn(
+                  "cursor-pointer flex items-center gap-2",
+                  language === 'pt' && "bg-accent text-accent-foreground font-medium"
+                )}
+              >
+                <span className="text-lg">{t.language.flags.pt}</span>
+                {t.language.portuguese}
+                {language === 'pt' && <span className="ml-auto text-xs">✓</span>}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Mobile Navigation */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild className="lg:hidden">
             <Button variant="ghost" size="icon">
@@ -142,6 +197,44 @@ export const Navigation = () => {
           </SheetTrigger>
           <SheetContent side="right" className="w-[300px]">
             <div className="flex flex-col gap-4 mt-8">
+              {/* Mobile Language Selector */}
+              <div className="flex items-center gap-2 p-3 rounded-lg border">
+                <span className="font-medium">{t.language.select}</span>
+                <span className="ml-auto text-lg">{t.language.flags[language]}</span>
+              </div>
+              <div className="ml-8 space-y-1">
+                <Button
+                  variant={language === 'tr' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => handleLanguageChange('tr')}
+                >
+                  <span className="text-lg">{t.language.flags.tr}</span>
+                  {t.language.turkish}
+                  {language === 'tr' && <span className="ml-auto">✓</span>}
+                </Button>
+                <Button
+                  variant={language === 'en' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => handleLanguageChange('en')}
+                >
+                  <span className="text-lg">{t.language.flags.en}</span>
+                  {t.language.english}
+                  {language === 'en' && <span className="ml-auto">✓</span>}
+                </Button>
+                <Button
+                  variant={language === 'pt' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => handleLanguageChange('pt')}
+                >
+                  <span className="text-lg">{t.language.flags.pt}</span>
+                  {t.language.portuguese}
+                  {language === 'pt' && <span className="ml-auto">✓</span>}
+                </Button>
+              </div>
+              
               {navItems.map((item) => (
                 <div key={item.path}>
                   <Link
@@ -181,6 +274,7 @@ export const Navigation = () => {
             </div>
           </SheetContent>
         </Sheet>
+        </div>
       </div>
     </header>
   );

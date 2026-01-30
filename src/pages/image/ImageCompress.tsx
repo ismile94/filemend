@@ -9,8 +9,10 @@ import { Slider } from '@/components/ui/slider';
 import { useImage } from '@/hooks/useImage';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const ImageCompress = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [quality, setQuality] = useState(80);
@@ -29,8 +31,8 @@ export const ImageCompress = () => {
 
     if (!imageFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir görüntü dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.imageFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -68,13 +70,13 @@ export const ImageCompress = () => {
       downloadBlob(blob, `sikistirilmis.${ext}`);
       
       toast({
-        title: 'Başarılı',
-        description: 'Görüntü başarıyla sıkıştırıldı.',
+        title: t.messages.success,
+        description: `${t.imageCompress.imagePrefix}${t.messages.fileCompressed}`,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Görüntü sıkıştırma işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: `${t.imageCompress.imagePrefix}${t.messages.processingError}`,
         variant: 'destructive',
       });
     }
@@ -91,10 +93,10 @@ export const ImageCompress = () => {
           <div className="p-2 bg-green-500 rounded-lg">
             <Minimize2 className="w-6 h-6 text-white" />
           </div>
-          Görüntü Sıkıştır
+          {t.imageCompress.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Görüntü dosyalarınızın boyutunu kaliteyi koruyarak küçültün.
+          {t.imageCompress.description}
         </p>
       </div>
 
@@ -112,7 +114,7 @@ export const ImageCompress = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               {/* Original */}
               <div>
-                <Label className="mb-2 block">Orijinal</Label>
+                <Label className="mb-2 block">{t.imageCompress.original}</Label>
                 <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                   {preview && (
                     <img
@@ -129,7 +131,7 @@ export const ImageCompress = () => {
 
               {/* Compressed */}
               <div>
-                <Label className="mb-2 block">Sıkıştırılmış</Label>
+                <Label className="mb-2 block">{t.imageCompress.compressed}</Label>
                 <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                   {compressedPreview ? (
                     <img
@@ -139,14 +141,14 @@ export const ImageCompress = () => {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      Henüz sıkıştırılmadı
+                      {t.imageCompress.notCompressedYet}
                     </div>
                   )}
                 </div>
                 {compressedBlob && (
                   <p className="text-sm text-muted-foreground mt-2 text-center">
                     {formatFileSize(compressedBlob.size)}
-                    {' '}(%{compressionRatio} küçültüldü)
+                    {t.imageCompress.reducedBy.replace('{ratio}', compressionRatio.toString())}
                   </p>
                 )}
               </div>
@@ -154,7 +156,7 @@ export const ImageCompress = () => {
 
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <Label>Kalite: %{quality}</Label>
+                <Label>{t.imageCompress.qualityLabel.replace('{quality}', quality.toString())}</Label>
               </div>
               <Slider
                 value={[quality]}
@@ -164,13 +166,13 @@ export const ImageCompress = () => {
                 step={5}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Düşük kalite = daha küçük dosya boyutu
+                {t.imageCompress.lowQualityNote}
               </p>
             </div>
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Sıkıştırılıyor..." />
+                <ProgressBar progress={progress} label={t.imageCompress.compressing} />
               </div>
             )}
 
@@ -181,16 +183,16 @@ export const ImageCompress = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.imageCompress.processing
               ) : compressedBlob ? (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Tekrar Sıkıştır ve İndir
+                  {t.imageCompress.compressAgainAndDownload}
                 </>
               ) : (
                 <>
                   <Minimize2 className="w-5 h-5 mr-2" />
-                  Görüntü Sıkıştır
+                  {t.imageCompress.compressAndDownload}
                 </>
               )}
             </Button>

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { usePDF } from '@/hooks/usePDF';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 interface PageRange {
   id: string;
@@ -17,6 +18,7 @@ interface PageRange {
 }
 
 export const PDFSplit = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState<number>(0);
   const [ranges, setRanges] = useState<PageRange[]>([{ id: '1', start: 1, end: 1 }]);
@@ -30,8 +32,8 @@ export const PDFSplit = () => {
 
     if (!pdfFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir PDF dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.pdfFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -45,8 +47,8 @@ export const PDFSplit = () => {
       setRanges([{ id: '1', start: 1, end: count }]);
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'PDF sayfa sayısı alınamadı.',
+        title: t.messages.error,
+        description: t.messages.pageError,
         variant: 'destructive',
       });
     }
@@ -86,8 +88,8 @@ export const PDFSplit = () => {
 
     if (validRanges.length === 0) {
       toast({
-        title: 'Hata',
-        description: 'Geçerli sayfa aralıkları girin.',
+        title: t.messages.error,
+        description: t.messages.rangeError,
         variant: 'destructive',
       });
       return;
@@ -102,13 +104,13 @@ export const PDFSplit = () => {
       });
 
       toast({
-        title: 'Başarılı',
-        description: `${blobs.length} PDF dosyası oluşturuldu.`,
+        title: t.messages.success,
+        description: `${blobs.length} PDF ${t.additional.fileCreated}`,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'PDF bölme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.additional.fileSplitError,
         variant: 'destructive',
       });
     }
@@ -121,10 +123,10 @@ export const PDFSplit = () => {
           <div className="p-2 bg-red-500 rounded-lg">
             <Split className="w-6 h-6 text-white" />
           </div>
-          PDF Böl
+          {t.pdfSplit.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          PDF dosyanızı birden fazla dosyaya bölün.
+          {t.pdfSplit.description}
         </p>
       </div>
 
@@ -144,17 +146,17 @@ export const PDFSplit = () => {
               <div>
                 <p className="font-medium">{file.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {formatFileSize(file.size)} • {pageCount} sayfa
+                  {formatFileSize(file.size)} • {t.additional.pageCount.replace('{count}', String(pageCount))}
                 </p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label>Sayfa Aralıkları</Label>
+                <Label>{t.ui.pageRanges}</Label>
                 <Button variant="outline" size="sm" onClick={addRange}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Aralık Ekle
+                  {t.pdfSplit.addRange}
                 </Button>
               </div>
 
@@ -162,7 +164,7 @@ export const PDFSplit = () => {
                 <div key={range.id} className="flex items-center gap-3">
                   <div className="flex-1 grid grid-cols-2 gap-3">
                     <div>
-                      <Label className="text-xs mb-1">Başlangıç</Label>
+                      <Label className="text-xs mb-1">{t.pdfSplit.start}</Label>
                       <Input
                         type="number"
                         min={1}
@@ -172,7 +174,7 @@ export const PDFSplit = () => {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs mb-1">Bitiş</Label>
+                      <Label className="text-xs mb-1">{t.pdfSplit.end}</Label>
                       <Input
                         type="number"
                         min={1}
@@ -198,7 +200,7 @@ export const PDFSplit = () => {
 
             {processing && (
               <div className="mt-6">
-                <ProgressBar progress={progress} label="Bölünüyor..." />
+                <ProgressBar progress={progress} label={t.pdfSplit.splitting} />
               </div>
             )}
 
@@ -209,11 +211,11 @@ export const PDFSplit = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.pdfSplit.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  PDF Böl ve İndir
+                  {t.pdfSplit.splitAndDownload}
                 </>
               )}
             </Button>

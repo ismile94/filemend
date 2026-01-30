@@ -16,8 +16,10 @@ import { useImage } from '@/hooks/useImage';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
 import { IMAGE_FORMATS } from '@/types';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const ImageConvert = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [outputFormat, setOutputFormat] = useState('png');
@@ -34,8 +36,8 @@ export const ImageConvert = () => {
 
     if (!imageFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir görüntü dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.imageFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -64,13 +66,13 @@ export const ImageConvert = () => {
       downloadBlob(blob, outputName);
       
       toast({
-        title: 'Başarılı',
-        description: 'Görüntü başarıyla dönüştürüldü.',
+        title: t.messages.success,
+        description: t.imageConvert.imageConverted,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'Görüntü dönüştürme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.imageConvert.convertError,
         variant: 'destructive',
       });
     }
@@ -83,10 +85,10 @@ export const ImageConvert = () => {
           <div className="p-2 bg-green-500 rounded-lg">
             <Move className="w-6 h-6 text-white" />
           </div>
-          Görüntü Dönüştür
+          {t.imageConvert.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Görüntü dosyalarınızı farklı formatlara dönüştürün.
+          {t.imageConvert.description}
         </p>
       </div>
 
@@ -113,7 +115,7 @@ export const ImageConvert = () => {
 
             {preview && (
               <div className="mb-6">
-                <Label className="mb-2 block">Önizleme</Label>
+                <Label className="mb-2 block">{t.imageConvert.preview}</Label>
                 <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                   <img
                     src={preview}
@@ -126,11 +128,11 @@ export const ImageConvert = () => {
 
             <div className="mb-6">
               <Label htmlFor="format" className="text-base font-medium mb-2 block">
-                Çıktı Formatı
+                {t.imageConvert.outputFormat}
               </Label>
               <Select value={outputFormat} onValueChange={setOutputFormat}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Format seçin" />
+                  <SelectValue placeholder={t.imageConvert.selectFormat} />
                 </SelectTrigger>
                 <SelectContent>
                   {IMAGE_FORMATS.map((format) => (
@@ -144,7 +146,7 @@ export const ImageConvert = () => {
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Dönüştürülüyor..." />
+                <ProgressBar progress={progress} label={t.imageConvert.converting} />
               </div>
             )}
 
@@ -155,11 +157,11 @@ export const ImageConvert = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.imageConvert.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Görüntü Dönüştür ve İndir
+                  {t.imageConvert.convertAndDownload}
                 </>
               )}
             </Button>

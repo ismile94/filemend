@@ -7,8 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { usePDF } from '@/hooks/usePDF';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 
 export const PDFCompress = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [compressedBlob, setCompressedBlob] = useState<Blob | null>(null);
   const { compressPDF, processing, progress } = usePDF();
@@ -21,8 +23,8 @@ export const PDFCompress = () => {
 
     if (!pdfFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir PDF dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.pdfFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -43,15 +45,15 @@ export const PDFCompress = () => {
     try {
       const blob = await compressPDF(file);
       setCompressedBlob(blob);
-      downloadBlob(blob, 'sikistirilmis.pdf');
+      downloadBlob(blob, 'compressed.pdf');
       toast({
-        title: 'Başarılı',
-        description: 'PDF dosyası başarıyla sıkıştırıldı.',
+        title: t.messages.success,
+        description: `${t.pdfCompress.pdfPrefix}${t.messages.fileCompressed}`,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'PDF sıkıştırma işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: `${t.pdfCompress.pdfPrefix}${t.messages.processingError}`,
         variant: 'destructive',
       });
     }
@@ -68,10 +70,10 @@ export const PDFCompress = () => {
           <div className="p-2 bg-red-500 rounded-lg">
             <Minimize2 className="w-6 h-6 text-white" />
           </div>
-          PDF Sıkıştır
+          {t.pdfCompress.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          PDF dosyanızın boyutunu optimize edin.
+          {t.pdfCompress.description}
         </p>
       </div>
 
@@ -91,7 +93,7 @@ export const PDFCompress = () => {
               <div className="flex-1">
                 <p className="font-medium">{file.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  Orijinal boyut: {formatFileSize(file.size)}
+                  {t.pdfCompress.originalSize}: {formatFileSize(file.size)}
                 </p>
               </div>
             </div>
@@ -102,11 +104,11 @@ export const PDFCompress = () => {
                   <CheckCircle className="w-6 h-6 text-green-500" />
                   <div>
                     <p className="font-medium text-green-700 dark:text-green-400">
-                      Sıkıştırma Tamamlandı!
+                      {t.pdfCompress.compressionCompleted}
                     </p>
                     <p className="text-sm text-green-600 dark:text-green-500">
                       {formatFileSize(file.size)} → {formatFileSize(compressedBlob.size)}
-                      {' '}(%{compressionRatio} küçültüldü)
+                      {t.pdfCompress.reducedBy.replace('{ratio}', compressionRatio.toString())}
                     </p>
                   </div>
                 </div>
@@ -115,7 +117,7 @@ export const PDFCompress = () => {
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Sıkıştırılıyor..." />
+                <ProgressBar progress={progress} label={t.pdfCompress.compressing} />
               </div>
             )}
 
@@ -126,16 +128,16 @@ export const PDFCompress = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.pdfCompress.processing
               ) : compressedBlob ? (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  Tekrar İndir
+                  {t.pdfCompress.downloadAgain}
                 </>
               ) : (
                 <>
                   <Minimize2 className="w-5 h-5 mr-2" />
-                  PDF Sıkıştır
+                  {t.pdfCompress.title}
                 </>
               )}
             </Button>

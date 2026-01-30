@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label';
 import { usePDF } from '@/hooks/usePDF';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBlob, formatFileSize } from '@/utils/fileHelpers';
+import { useTranslation } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 type RotationDegree = 90 | 180 | 270;
 
 export const PDFRotate = () => {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [rotation, setRotation] = useState<RotationDegree>(90);
   const { rotatePDF, processing, progress } = usePDF();
@@ -25,8 +27,8 @@ export const PDFRotate = () => {
 
     if (!pdfFile) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen bir PDF dosyası yükleyin.',
+        title: t.messages.error,
+        description: `${t.messages.pleaseUpload} ${t.messages.pdfFile} ${t.messages.fileUpload}`,
         variant: 'destructive',
       });
       return;
@@ -45,24 +47,24 @@ export const PDFRotate = () => {
 
     try {
       const blob = await rotatePDF(file, rotation);
-      downloadBlob(blob, 'dondurulmus.pdf');
+      downloadBlob(blob, t.additional.rotatedFile);
       toast({
-        title: 'Başarılı',
-        description: 'PDF dosyası başarıyla döndürüldü.',
+        title: t.messages.success,
+        description: `PDF ${t.messages.fileRotated}`,
       });
     } catch (error) {
       toast({
-        title: 'Hata',
-        description: 'PDF döndürme işlemi başarısız oldu.',
+        title: t.messages.error,
+        description: t.additional.fileRotateError,
         variant: 'destructive',
       });
     }
   };
 
   const rotationOptions: { value: RotationDegree; label: string; icon: React.ElementType }[] = [
-    { value: 90, label: '90° Saat Yönünde', icon: Redo2 },
-    { value: 180, label: '180°', icon: RotateCw },
-    { value: 270, label: '90° Saat Yönünün Tersine', icon: Undo2 },
+    { value: 90, label: t.pdfRotate.clockwise90, icon: Redo2 },
+    { value: 180, label: t.pdfRotate.degrees180, icon: RotateCw },
+    { value: 270, label: t.pdfRotate.counterClockwise90, icon: Undo2 },
   ];
 
   return (
@@ -72,10 +74,10 @@ export const PDFRotate = () => {
           <div className="p-2 bg-red-500 rounded-lg">
             <RotateCw className="w-6 h-6 text-white" />
           </div>
-          PDF Döndür
+          {t.pdfRotate.title}
         </h1>
         <p className="text-muted-foreground mt-2">
-          PDF sayfalarınızı istediğiniz açıda döndürün.
+          {t.pdfRotate.description}
         </p>
       </div>
 
@@ -101,7 +103,7 @@ export const PDFRotate = () => {
             </div>
 
             <div className="mb-6">
-              <Label className="text-base font-medium mb-4 block">Döndürme Açısı</Label>
+              <Label className="text-base font-medium mb-4 block">{t.pdfRotate.rotationAngle}</Label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {rotationOptions.map((option) => (
                   <button
@@ -123,7 +125,7 @@ export const PDFRotate = () => {
 
             {processing && (
               <div className="mb-6">
-                <ProgressBar progress={progress} label="Döndürülüyor..." />
+                <ProgressBar progress={progress} label={t.pdfRotate.rotating} />
               </div>
             )}
 
@@ -134,11 +136,11 @@ export const PDFRotate = () => {
               size="lg"
             >
               {processing ? (
-                'İşleniyor...'
+                t.pdfRotate.processing
               ) : (
                 <>
                   <Download className="w-5 h-5 mr-2" />
-                  PDF Döndür ve İndir
+                  {t.pdfRotate.rotateAndDownload}
                 </>
               )}
             </Button>

@@ -16,112 +16,111 @@ import {
 import { ToolCard } from '@/components/ToolCard';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { useTranslation } from '@/contexts/LanguageContext';
 
-const pdfTools = [
-  {
-    title: 'PDF Düzenle',
-    description: 'PDF dosyalarınızı görüntüleyin, birleştirin, döndürün ve düzenleyin.',
-    icon: FileEdit,
-    path: '/pdf/edit',
-    color: 'bg-red-500',
-  },
-  {
-    title: 'PDF Böl',
-    description: 'PDF dosyanızı birden fazla dosyaya bölün.',
-    icon: Split,
-    path: '/pdf/split',
-    color: 'bg-red-500',
-  },
-  {
-    title: 'PDF Sıkıştır',
-    description: 'PDF dosyanızın boyutunu küçültün.',
-    icon: Minimize2,
-    path: '/pdf/compress',
-    color: 'bg-red-500',
-  },
-  {
-    title: 'PDF Döndür',
-    description: 'PDF sayfalarınızı döndürün.',
-    icon: RotateCw,
-    path: '/pdf/rotate',
-    color: 'bg-red-500',
-  },
-];
 
-const audioTools = [
-  {
-    title: 'Ses Dönüştür',
-    description: 'Ses dosyalarınızı farklı formatlara dönüştürün.',
-    icon: Music,
-    path: '/audio/convert',
-    color: 'bg-blue-500',
-  },
-  {
-    title: 'Ses Kırp',
-    description: 'Ses dosyanızdan istediğiniz bölümü kesin.',
-    icon: Scissors,
-    path: '/audio/trim',
-    color: 'bg-blue-500',
-  },
-  {
-    title: 'Ses Birleştir',
-    description: 'Birden fazla ses dosyasını birleştirin.',
-    icon: Merge,
-    path: '/audio/merge',
-    color: 'bg-blue-500',
-  },
-];
 
-const imageTools = [
-  {
-    title: 'Görüntü Sıkıştır',
-    description: 'Görüntü dosyalarınızın boyutunu küçültün.',
-    icon: Minimize2,
-    path: '/image/compress',
-    color: 'bg-green-500',
-  },
-  {
-    title: 'Görüntü Dönüştür',
-    description: 'Görüntü dosyalarınızı farklı formatlara dönüştürün.',
-    icon: Move,
-    path: '/image/convert',
-    color: 'bg-green-500',
-  },
-  {
-    title: 'Görüntü Boyutlandır',
-    description: 'Görüntü dosyalarınızın boyutunu değiştirin.',
-    icon: Image,
-    path: '/image/resize',
-    color: 'bg-green-500',
-  },
-  {
-    title: 'Görüntü Döndür',
-    description: 'Görüntülerinizi döndürün.',
-    icon: RotateCw,
-    path: '/image/rotate',
-    color: 'bg-green-500',
-  },
-];
 
-const features = [
-  {
-    icon: Shield,
-    title: 'Güvenli İşleme',
-    description: 'Tüm işlemler tarayıcınızda yapılır. Dosyalarınız asla sunucularımıza yüklenmez.',
-  },
-  {
-    icon: Zap,
-    title: 'Hızlı ve Verimli',
-    description: 'Modern web teknolojileri sayesinde dosyalarınız hızlıca işlenir.',
-  },
-  {
-    icon: Lock,
-    title: 'Gizlilik Odaklı',
-    description: 'Dosyalarınız sadece sizin cihazınızda kalır. Hiçbir veri saklanmaz.',
-  },
-];
 
 export const Home = () => {
+  const { t } = useTranslation();
+
+  const pdfTools = [
+    {
+      title: t.home.pdfTools.edit.title,
+      description: t.home.pdfTools.edit.description,
+      icon: FileEdit,
+      path: '/pdf/edit',
+      color: 'bg-red-500',
+    },
+    {
+      title: t.home.pdfTools.split.title,
+      description: t.home.pdfTools.split.description,
+      icon: Split,
+      path: '/pdf/split',
+      color: 'bg-red-500',
+    },
+    {
+      title: t.home.pdfTools.compress.title,
+      description: t.home.pdfTools.compress.description,
+      icon: Minimize2,
+      path: '/pdf/compress',
+      color: 'bg-red-500',
+    },
+  ];
+
+  const audioTools = [
+    {
+      title: t.home.audioTools.convert.title,
+      description: t.home.audioTools.convert.description,
+      icon: Music,
+      path: '/audio/convert',
+      color: 'bg-blue-500',
+    },
+    {
+      title: t.home.audioTools.trim.title,
+      description: t.home.audioTools.trim.description,
+      icon: Scissors,
+      path: '/audio/trim',
+      color: 'bg-blue-500',
+    },
+    {
+      title: t.home.audioTools.merge.title,
+      description: t.home.audioTools.merge.description,
+      icon: Merge,
+      path: '/audio/merge',
+      color: 'bg-blue-500',
+    },
+  ];
+
+  const imageTools = [
+    {
+      title: t.home.imageTools.compress.title,
+      description: t.home.imageTools.compress.description,
+      icon: Minimize2,
+      path: '/image/compress',
+      color: 'bg-green-500',
+    },
+    {
+      title: t.home.imageTools.convert.title,
+      description: t.home.imageTools.convert.description,
+      icon: Move,
+      path: '/image/convert',
+      color: 'bg-green-500',
+    },
+    {
+      title: t.home.imageTools.resize.title,
+      description: t.home.imageTools.resize.description,
+      icon: Image,
+      path: '/image/resize',
+      color: 'bg-green-500',
+    },
+    {
+      title: t.home.imageTools.rotate.title,
+      description: t.home.imageTools.rotate.description,
+      icon: RotateCw,
+      path: '/image/rotate',
+      color: 'bg-green-500',
+    },
+  ];
+
+  const features = [
+    {
+      icon: Shield,
+      title: t.home.features.secure.title,
+      description: t.home.features.secure.description,
+    },
+    {
+      icon: Zap,
+      title: t.home.features.fast.title,
+      description: t.home.features.fast.description,
+    },
+    {
+      icon: Lock,
+      title: t.home.features.private.title,
+      description: t.home.features.private.description,
+    },
+  ];
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -131,27 +130,26 @@ export const Home = () => {
           <div className="max-w-3xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
               <Zap className="w-4 h-4" />
-              100% Tarayıcıda Çalışır
+              {t.home.hero.badge}
             </div>
             <h1 className="text-4xl lg:text-6xl font-bold tracking-tight mb-6">
-              Dosyalarınızı{' '}
-              <span className="text-primary">Güvenle İşleyin</span>
+              {t.home.hero.title}{' '}
+              <span className="text-primary">{t.home.hero.titleHighlight}</span>
             </h1>
             <p className="text-lg lg:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              PDF, ses ve görüntü dosyalarınızı tarayıcınızda kolayca işleyin. 
-              Dosyalarınız asla sunucularımıza yüklenmez.
+              {t.home.hero.description}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="gap-2">
                 <Link to="/pdf/edit">
                   <FileEdit className="w-5 h-5" />
-                  PDF Düzenle
+                  {t.home.hero.primaryButton}
                 </Link>
               </Button>
               <Button asChild variant="outline" size="lg" className="gap-2">
                 <Link to="/audio/convert">
                   <Music className="w-5 h-5" />
-                  Ses Araçları
+                  {t.home.hero.secondaryButton}
                 </Link>
               </Button>
             </div>
@@ -167,8 +165,8 @@ export const Home = () => {
               <FileText className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">PDF Araçları</h2>
-              <p className="text-muted-foreground">PDF dosyalarınızı kolayca yönetin</p>
+              <h2 className="text-2xl font-bold">{t.home.pdfTools.title}</h2>
+              <p className="text-muted-foreground">{t.home.pdfTools.description}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -187,8 +185,8 @@ export const Home = () => {
               <Music className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Ses Araçları</h2>
-              <p className="text-muted-foreground">Ses dosyalarınızı dönüştürün ve düzenleyin</p>
+              <h2 className="text-2xl font-bold">{t.home.audioTools.title}</h2>
+              <p className="text-muted-foreground">{t.home.audioTools.description}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -207,8 +205,8 @@ export const Home = () => {
               <Image className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Görüntü Araçları</h2>
-              <p className="text-muted-foreground">Görüntü dosyalarınızı optimize edin</p>
+              <h2 className="text-2xl font-bold">{t.home.imageTools.title}</h2>
+              <p className="text-muted-foreground">{t.home.imageTools.description}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -223,9 +221,9 @@ export const Home = () => {
       <section className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-12">
-            <h2 className="text-3xl font-bold mb-4">Neden FileTools?</h2>
+            <h2 className="text-3xl font-bold mb-4">{t.home.features.title}</h2>
             <p className="text-muted-foreground">
-              Modern web teknolojileri ile dosyalarınızı güvenle işleyin
+              {t.home.features.subtitle}
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

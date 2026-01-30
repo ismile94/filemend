@@ -13,35 +13,38 @@ import { ImageCompress } from '@/pages/image/ImageCompress';
 import { ImageConvert } from '@/pages/image/ImageConvert';
 import { ImageResize } from '@/pages/image/ImageResize';
 import { ImageRotate } from '@/pages/image/ImageRotate';
+import { LanguageProvider } from '@/contexts/LanguageContext';
 import './App.css';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="pdf">
-            <Route path="edit" element={<PDFEdit />} />
-            <Route path="split" element={<PDFSplit />} />
-            <Route path="compress" element={<PDFCompress />} />
-            <Route path="rotate" element={<PDFRotate />} />
+    <LanguageProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="pdf">
+              <Route path="edit" element={<PDFEdit />} />
+              <Route path="split" element={<PDFSplit />} />
+              <Route path="compress" element={<PDFCompress />} />
+              <Route path="rotate" element={<PDFRotate />} />
+            </Route>
+            <Route path="audio">
+              <Route path="convert" element={<AudioConvert />} />
+              <Route path="trim" element={<AudioTrim />} />
+              <Route path="merge" element={<AudioMerge />} />
+            </Route>
+            <Route path="image">
+              <Route path="compress" element={<ImageCompress />} />
+              <Route path="convert" element={<ImageConvert />} />
+              <Route path="resize" element={<ImageResize />} />
+              <Route path="rotate" element={<ImageRotate />} />
+            </Route>
           </Route>
-          <Route path="audio">
-            <Route path="convert" element={<AudioConvert />} />
-            <Route path="trim" element={<AudioTrim />} />
-            <Route path="merge" element={<AudioMerge />} />
-          </Route>
-          <Route path="image">
-            <Route path="compress" element={<ImageCompress />} />
-            <Route path="convert" element={<ImageConvert />} />
-            <Route path="resize" element={<ImageResize />} />
-            <Route path="rotate" element={<ImageRotate />} />
-          </Route>
-        </Route>
-      </Routes>
-      <Toaster position="top-center" richColors />
-    </BrowserRouter>
+        </Routes>
+        <Toaster position="top-center" richColors />
+      </BrowserRouter>
+    </LanguageProvider>
   );
 }
 
